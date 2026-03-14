@@ -1,0 +1,3879 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>斗地主</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=JetBrains+Mono:wght@600&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root {
+      --bg: #0b100b;
+      --fg: #e8f0e8;
+      --muted: #6b7b6b;
+      --accent: #22c55e;
+      --accent-glow: rgba(34, 197, 94, 0.4);
+      --card-bg: #ffffff;
+      --card-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      --danger: #ef4444;
+      --warning: #eab308;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    
+    html, body { 
+      height: 100%; 
+      width: 100%; 
+      overflow: hidden;
+      font-family: 'Noto Sans SC', sans-serif;
+      background: var(--bg);
+      color: var(--fg);
+      user-select: none;
+      margin: 0;
+      padding: 0;
+    }
+
+    #app {
+      height: 100%;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* 背景纹理 */
+    .bg-texture {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: 
+        radial-gradient(circle at 50% 0%, rgba(34, 197, 94, 0.08) 0%, transparent 60%),
+        linear-gradient(180deg, #080d08 0%, #050805 100%);
+    }
+    .bg-grid {
+      position: fixed; inset: 0; z-index: -1;
+      background-image: linear-gradient(rgba(34, 197, 94, 0.03) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(34, 197, 94, 0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      mask-image: linear-gradient(black, transparent 90%);
+    }
+
+    .screen { display: none; width: 100%; height: 100%; position: relative; flex-direction: column; }
+    .screen.active { display: flex; }
+
+    /* 通用组件 */
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      border: 1px solid rgba(255,255,255,0.1);
+      background: rgba(255,255,255,0.05);
+      color: var(--fg);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+      outline: none;
+    }
+    .btn:active { transform: scale(0.96); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+    .btn.primary { background: var(--accent); border-color: var(--accent); color: #000; font-weight: 600; }
+    .btn.danger { background: #b91c1c; border-color: #b91c1c; }
+    .btn.sm { padding: 8px 16px; font-size: 12px; }
+
+    /* 主菜单 */
+    #menu-screen { justify-content: center; align-items: center; padding: 20px; gap: 48px; }
+    .title-box { text-align: center; }
+    .title-box h1 { font-family: 'JetBrains Mono', monospace; font-size: clamp(32px, 9vw, 56px); color: var(--accent); letter-spacing: 2px; margin-bottom: 8px; }
+    .title-box p { color: var(--muted); font-size: 14px; letter-spacing: 1px; }
+    .menu-list { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px; }
+    .wechat-info { color: var(--muted); font-size: 11px; margin-top: 24px; }
+
+    /* 大厅 */
+    #lobby-screen { justify-content: center; align-items: center; padding: 20px; }
+    .lobby-card {
+      background: rgba(0,0,0,0.4);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      padding: 32px;
+      width: 100%;
+      max-width: 400px;
+      text-align: center;
+    }
+    .room-code { font-family: 'JetBrains Mono', monospace; font-size: 40px; color: var(--accent); margin: 16px 0; letter-spacing: 4px; }
+    .input-group { display: flex; gap: 8px; justify-content: center; margin: 16px 0; }
+    .input-group input {
+      background: rgba(0,0,0,0.6);
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 10px;
+      border-radius: 6px;
+      color: #fff;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      width: 120px;
+      text-transform: uppercase;
+    }
+    .slots-grid { display: flex; justify-content: center; gap: 12px; margin: 24px 0; }
+    .slot {
+      width: 80px; height: 80px;
+      border-radius: 12px;
+      border: 2px dashed rgba(255,255,255,0.1);
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      font-size: 11px; color: var(--muted);
+      transition: all 0.3s;
+    }
+    .slot.filled { border-style: solid; }
+    .slot.me { border-color: var(--accent); background: rgba(34, 197, 94, 0.1); color: var(--accent); }
+    .slot.ai { border-color: #a855f7; background: rgba(168, 85, 247, 0.1); color: #a855f7; }
+    .slot.human { border-color: #3b82f6; background: rgba(59, 130, 246, 0.1); color: #3b82f6; }
+
+    /* 游戏界面核心布局 */
+    #game-screen { height: 100%; width: 100%; display: none; flex-direction: column; }
+    #game-screen.active { display: flex; }
+
+    /* 顶部信息栏 */
+    .top-bar {
+      height: 48px;
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 0 16px;
+      background: rgba(0,0,0,0.3);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
+    }
+    .info-badge { font-size: 12px; color: var(--muted); }
+    .mult-badge { color: var(--warning); font-family: 'JetBrains Mono', monospace; font-weight: 600; margin-left: 12px; }
+
+    /* 游戏桌面容器 */
+    .game-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      position: relative;
+      width: 100%;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 4px;
+      height: calc(100% - 48px); /* 减去顶部栏的高度 */
+    }
+
+    /* 对手区域 + 中央区域 布局网格 */
+    .game-grid {
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 70px 1fr 70px;
+      gap: 4px;
+      padding: 4px;
+    }
+    
+    /* 确保游戏区域在小屏幕上有足够的空间 */
+    @media (max-width: 600px) {
+      .game-container {
+        padding: 2px;
+      }
+      
+      .game-grid {
+        gap: 2px;
+        padding: 2px;
+      }
+      
+      /* 减少对手区域宽度，增加中央区域空间 */
+      .game-grid {
+        grid-template-columns: 50px 1fr 50px;
+      }
+      
+      /* 减小对手区域的字体大小 */
+      .name-txt {
+        font-size: 10px;
+      }
+      
+      .count-txt {
+        font-size: 8px;
+      }
+      
+      /* 减小对手区域的牌背大小 */
+      .back-card {
+        width: 12px;
+        height: 18px;
+        margin-left: -4px;
+      }
+    }
+    
+    /* 电脑端适配 */
+    @media (min-width: 800px) and (orientation: landscape) {
+      .game-grid { grid-template-columns: 140px 1fr 140px; gap: 16px; padding: 16px; }
+      .top-bar { max-width: 1000px; margin: 0 auto; width: 100%; }
+    }
+    
+    /* 横屏手机适配 */
+    @media (max-width: 600px) and (orientation: landscape) {
+      .hand-area {
+        max-height: 90px;
+      }
+      .card {
+        width: clamp(30px, 8vw, 45px);
+        height: clamp(42px, 11vw, 65px);
+        font-size: clamp(12px, 3.5vw, 18px);
+      }
+      .action-row {
+        min-height: 36px;
+        gap: 8px;
+      }
+      .opt-btn {
+        padding: 6px 16px;
+        font-size: 12px;
+      }
+    }
+    
+    /* 小屏幕竖屏适配 */
+    @media (max-width: 400px) and (orientation: portrait) {
+      .menu-list {
+        max-width: 260px;
+      }
+      .btn {
+        padding: 10px 20px;
+        font-size: 13px;
+      }
+      .lobby-card {
+        padding: 24px;
+      }
+      .room-code {
+        font-size: 32px;
+      }
+    }
+
+    /* 对手区域 */
+    .side-zone { display: flex; flex-direction: column; align-items: center; padding-top: 10px; min-width: 0; }
+    .avatar-box { text-align: center; margin-bottom: 8px; width: 100%; overflow: hidden; }
+    .name-txt { font-size: 12px; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .count-txt { font-size: 10px; color: var(--muted); }
+    .card-backs { display: flex; justify-content: center; flex-wrap: wrap; }
+    .back-card { width: 16px; height: 24px; background: #1e3a5f; border-radius: 2px; margin-left: -6px; border: 1px solid rgba(255,255,255,0.1); }
+    .back-card:first-child { margin-left: 0; }
+    
+    /* 电脑端对手卡牌大一点 */
+    @media (min-width: 800px) {
+      .back-card { width: 22px; height: 32px; margin-left: -8px; }
+      .name-txt { font-size: 14px; }
+    }
+
+    /* 中央区域 */
+    .center-zone {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      background: rgba(0,0,0,0.2);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    
+    .dipai-row {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      background: rgba(0,0,0,0.6);
+      padding: 4px 12px;
+      border-radius: 20px;
+      z-index: 10;
+    }
+    .dipai-label { font-size: 10px; color: var(--muted); margin-right: 4px; }
+
+    .play-area {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      padding: 40px 8px 8px 8px;
+    }
+    .play-slot { min-height: 60px; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 2px; }
+    
+    .side-play-area { margin-top: 12px; min-height: 40px; }
+
+    /* 底部手牌区 */
+    .bottom-zone {
+      flex-shrink: 0;
+      background: linear-gradient(180deg, transparent 0%, rgba(0,0,0,0.6) 30%);
+      padding: 8px 0 16px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      min-height: 140px;
+      width: 100%;
+    }
+    
+    .my-info { text-align: center; margin-bottom: 4px; font-size: 13px; }
+    
+    .hand-area {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      padding: 0 4px;
+      gap: 2px;
+      max-height: 120px;
+      overflow: hidden;
+    }
+    
+    /* 横屏手机适配 */
+    @media (max-width: 600px) and (orientation: landscape) {
+      .bottom-zone {
+        min-height: 120px;
+      }
+      .hand-area {
+        max-height: 90px;
+      }
+      .card {
+        width: clamp(28px, 7vw, 40px);
+        height: clamp(38px, 10vw, 58px);
+        font-size: clamp(11px, 3vw, 16px);
+      }
+      .action-row {
+        min-height: 36px;
+        gap: 8px;
+      }
+      .opt-btn {
+        padding: 6px 16px;
+        font-size: 12px;
+      }
+    }
+    
+    /* 竖屏手机适配 */
+    @media (max-width: 480px) and (orientation: portrait) {
+      .bottom-zone {
+        min-height: 160px;
+      }
+      .hand-area {
+        max-height: 100px;
+      }
+      .card {
+        width: clamp(32px, 8.5vw, 45px);
+        height: clamp(44px, 11.5vw, 65px);
+        font-size: clamp(12px, 3.5vw, 18px);
+      }
+    }
+    
+    /* 平板适配 */
+    @media (min-width: 600px) and (max-width: 1024px) {
+      .bottom-zone {
+        min-height: 150px;
+      }
+      .hand-area {
+        max-height: 110px;
+      }
+      .card {
+        width: clamp(36px, 7vw, 50px);
+        height: clamp(50px, 10vw, 70px);
+      }
+    }
+
+    /* 卡牌样式 */
+    .card {
+      width: clamp(36px, 9vw, 54px);
+      height: clamp(50px, 12.5vw, 76px);
+      background: var(--card-bg);
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: clamp(14px, 4vw, 20px);
+      color: #111;
+      border: 1px solid rgba(0,0,0,0.1);
+      box-shadow: var(--card-shadow);
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      position: relative;
+      overflow: hidden;
+    }
+    .card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+      transition: left 0.5s;
+    }
+    .card:hover::before {
+      left: 100%;
+    }
+    .card.red { color: #dc2626; }
+    .card.joker { font-size: clamp(9px, 2.5vw, 11px); text-align: center; line-height: 1.1; }
+    .card.selected {
+      transform: translateY(-16px) scale(1.05);
+      box-shadow: 0 12px 24px rgba(34,197,94,0.4);
+      border-color: var(--accent);
+      border-width: 2px;
+    }
+    .card.mini { width: 24px; height: 34px; font-size: 10px; border-radius: 4px; }
+    @keyframes cardFlip {
+      0% { transform: rotateY(0deg); }
+      50% { transform: rotateY(90deg); }
+      100% { transform: rotateY(0deg); }
+    }
+    .card.flipping {
+      animation: cardFlip 0.6s ease-in-out;
+    }
+    @keyframes cardPlay {
+      0% { transform: translateY(-16px) scale(1.05); }
+      50% { transform: translateY(-24px) scale(1.1); }
+      100% { transform: translateY(0) scale(1); }
+    }
+    .card.playing {
+      animation: cardPlay 0.4s ease-in-out;
+    }
+
+    /* 操作栏 */
+    .action-row { display: flex; justify-content: center; gap: 10px; min-height: 44px; margin-top: 8px; align-items: center; }
+    .opt-btn { padding: 8px 20px; font-size: 14px; border-radius: 6px; border: none; cursor: pointer; font-weight: 500; }
+    .opt-grab { background: var(--warning); color: #000; }
+    .opt-skip { background: rgba(255,255,255,0.1); color: var(--fg); border: 1px solid rgba(255,255,255,0.2); }
+
+    /* 本地换人弹窗 */
+    .local-overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.95);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+      backdrop-filter: blur(4px);
+    }
+    .local-overlay h2 { font-size: 24px; margin-bottom: 8px; color: var(--accent); }
+    .local-overlay p { color: var(--muted); margin-bottom: 32px; }
+
+    /* 结算 */
+    .result-modal {
+      position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 200;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 20px;
+    }
+    .result-modal.win h2 { color: var(--accent); }
+    .result-modal.lose h2 { color: var(--danger); }
+    .result-box { background: rgba(255,255,255,0.05); padding: 20px; border-radius: 12px; margin: 24px 0; width: 80%; max-width: 300px; }
+
+    .hidden { display: none !important; }
+  </style>
+</head>
+
+<body>
+  <div class="bg-texture"></div>
+  <div class="bg-grid"></div>
+
+  <div id="app">
+    <!-- 菜单 -->
+    <div id="menu-screen" class="screen active">
+      <div class="title-box">
+        <h1>DOUDIZHU</h1>
+        <p>Classic Card Game</p>
+      </div>
+      <div class="menu-list">
+        <button class="btn primary" onclick="startGame('ai')">对战电脑</button>
+        <button class="btn" onclick="startGame('local')">本地多人</button>
+        <button class="btn" onclick="startGame('lan')">本地联机</button>
+        <button class="btn" onclick="startGame('online')">网络联机</button>
+        <button class="btn" onclick="startGame('score')">叫分玩法</button>
+        <button class="btn" id="login-btn" onclick="showLoginScreen()">登录/注册</button>
+        <button class="btn hidden" id="friends-btn" onclick="showFriendsScreen()">好友列表</button>
+        <button class="btn hidden" id="admin-btn" onclick="showAdminScreen()">管理员</button>
+        <button class="btn" onclick="showFeedbackModal()">反馈</button>
+      </div>
+      <p class="wechat-info">微信号：qxlyjjjz</p>
+    </div>
+
+    <!-- 大厅 -->
+    <div id="lobby-screen" class="screen">
+      <div class="lobby-card">
+        <h2 class="text-lg mb-2" id="lobby-title">创建房间</h2>
+        <div class="input-group" style="margin-bottom: 12px;">
+          <input type="text" id="room-name" placeholder="房间名称" maxlength="20">
+          <button class="btn primary sm" onclick="updateRoomName()">修改</button>
+        </div>
+        <div class="room-code" id="room-code">----</div>
+        <div class="input-group" id="join-group">
+          <input type="text" id="join-input" placeholder="输入房间号" maxlength="7">
+          <button class="btn primary sm" onclick="joinCurrentMode()">加入</button>
+        </div>
+        <div class="input-group" style="margin-top: 12px;">
+          <input type="text" id="search-input" placeholder="搜索房间" maxlength="20">
+          <button class="btn primary sm" onclick="searchRooms()">搜索</button>
+        </div>
+        <div id="search-results" style="margin: 12px 0; max-height: 120px; overflow-y: auto;"></div>
+        <div class="slots-grid" id="slots">
+          <div class="slot me"><span>我</span></div>
+          <div class="slot"><span>空位</span></div>
+          <div class="slot"><span>空位</span></div>
+        </div>
+        <div class="flex justify-center gap-3 flex-wrap">
+          <button class="btn sm" onclick="backToMenu()">返回</button>
+          <button class="btn sm hidden" id="add-ai-btn" onclick="addAI()">添加电脑</button>
+          <button class="btn primary sm hidden" id="start-btn" onclick="startNetGame()" disabled>开始</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 游戏 -->
+    <div id="game-screen" class="screen">
+      <div class="top-bar">
+        <div class="info-badge">
+          <span id="mode-text">单机模式</span>
+          <span class="mult-badge">x<span id="mult">1</span></span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn sm" onclick="toggleFullscreen()">全屏</button>
+          <button class="btn sm" onclick="backToMenu()">退出</button>
+        </div>
+      </div>
+
+      <div class="game-container">
+        <div class="game-grid">
+          <!-- 左侧 -->
+          <div class="side-zone">
+            <div class="avatar-box">
+              <div class="name-txt" id="name-l">AI-1</div>
+              <div class="count-txt" id="cnt-l">17张</div>
+            </div>
+            <div class="card-backs" id="backs-l"></div>
+            <div class="play-slot side-play-area" id="play-l"></div>
+          </div>
+
+          <!-- 中央 -->
+          <div class="center-zone">
+            <div class="dipai-row" id="dipai-box"><span class="dipai-label">底牌</span></div>
+            <div class="play-area">
+              <div class="play-slot" id="play-main"></div>
+            </div>
+          </div>
+
+          <!-- 右侧 -->
+          <div class="side-zone">
+            <div class="avatar-box">
+              <div class="name-txt" id="name-r">AI-2</div>
+              <div class="count-txt" id="cnt-r">17张</div>
+            </div>
+            <div class="card-backs" id="backs-r"></div>
+            <div class="play-slot side-play-area" id="play-r"></div>
+          </div>
+        </div>
+
+        <!-- 底部手牌 -->
+        <div class="bottom-zone">
+          <div class="my-info">
+            <span id="my-name">玩家</span>
+            <span id="my-cnt" style="color:var(--muted);font-size:11px;margin-left:6px;">17张</span>
+          </div>
+          <div class="hand-area" id="my-hand"></div>
+          <div class="action-row" id="act-row"></div>
+        </div>
+        
+        <!-- 本地换人专用遮罩 -->
+        <div class="local-overlay hidden" id="local-mask">
+          <h2 id="lm-title">玩家1</h2>
+          <p>请将设备交给该玩家</p>
+          <button class="btn primary" onclick="lmConfirm()">准备好了</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 登录/注册屏幕 -->
+    <div id="login-screen" class="screen">
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; padding: 20px;">
+        <div class="lobby-card" style="max-width: 350px;">
+          <h2 class="text-lg mb-4" id="login-title">登录</h2>
+          <div style="display: flex; gap: 12px; margin-bottom: 20px;">
+            <button class="btn primary" onclick="switchToLogin()">登录</button>
+            <button class="btn" onclick="switchToRegister()">注册</button>
+          </div>
+          <div id="login-form">
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 14px;">用户名</label>
+              <input type="text" id="login-username" placeholder="请输入用户名" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 14px;">密码</label>
+              <input type="password" id="login-password" placeholder="请输入密码" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            </div>
+            <button class="btn primary" onclick="login()" style="width: 100%;">登录</button>
+          </div>
+          <div id="register-form" class="hidden">
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 14px;">用户名</label>
+              <input type="text" id="register-username" placeholder="请输入用户名" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            </div>
+            <div style="margin-bottom: 12px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 14px;">密码</label>
+              <input type="password" id="register-password" placeholder="请输入密码" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            </div>
+            <div style="margin-bottom: 20px;">
+              <label style="display: block; margin-bottom: 4px; font-size: 14px;">确认密码</label>
+              <input type="password" id="register-confirm" placeholder="请再次输入密码" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            </div>
+            <button class="btn primary" onclick="register()" style="width: 100%;">注册</button>
+          </div>
+          <div style="margin-top: 16px; text-align: center;">
+            <button class="btn sm" onclick="backToMenu()">返回菜单</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 好友系统屏幕 -->
+    <div id="friends-screen" class="screen">
+      <div class="top-bar">
+        <div class="info-badge">好友系统</div>
+        <div style="display: flex; gap: 8px;">
+          <button class="btn sm" onclick="backToMenu()">返回菜单</button>
+          <button class="btn sm" onclick="logout()">退出登录</button>
+        </div>
+      </div>
+      <div style="flex: 1; padding: 20px; overflow-y: auto;">
+        <div style="margin-bottom: 20px;">
+          <h3 style="margin-bottom: 12px;">个人资料</h3>
+          <div style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+              <span>用户名:</span>
+              <span id="user-username"></span>
+            </div>
+            <div style="margin-bottom: 8px;">
+              <span>个人简介:</span>
+              <div style="margin-top: 4px;">
+                <input type="text" id="user-bio" placeholder="输入个人简介" style="width: 100%; padding: 8px; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; background: rgba(0,0,0,0.6); color: #fff;">
+              </div>
+            </div>
+            <button class="btn sm" onclick="updateBio()">更新简介</button>
+          </div>
+        </div>
+        <div style="margin-bottom: 20px;">
+          <h3 style="margin-bottom: 12px;">添加好友</h3>
+          <div class="input-group">
+            <input type="text" id="add-friend-input" placeholder="输入用户名" style="flex: 1; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            <button class="btn primary sm" onclick="addFriend()">添加</button>
+          </div>
+        </div>
+        <div>
+          <h3 style="margin-bottom: 12px;">我的好友</h3>
+          <div id="friends-list" style="max-height: 400px; overflow-y: auto;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">暂无好友</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 聊天窗口 -->
+    <div class="result-modal hidden" id="chat-modal">
+      <h2 style="font-size:24px; font-weight:700; margin-bottom: 20px;">聊天</h2>
+      <div id="chat-messages" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px; margin-bottom: 16px; max-height: 300px; overflow-y: auto;"></div>
+      <div style="display: flex; gap: 8px;">
+        <input type="text" id="chat-input" placeholder="输入消息" style="flex: 1; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+        <button class="btn primary sm" onclick="sendMessage()">发送</button>
+      </div>
+      <button class="btn sm mt-4" onclick="closeChat()">关闭</button>
+    </div>
+
+    <!-- 管理员界面 -->
+    <div id="admin-screen" class="screen">
+      <div class="top-bar">
+        <div class="info-badge">管理员系统</div>
+        <button class="btn sm" onclick="backToMenu()">返回</button>
+      </div>
+      <div style="flex: 1; padding: 20px; overflow-y: auto;">
+        <div style="margin-bottom: 24px;">
+          <h3 style="margin-bottom: 12px;">用户管理</h3>
+          <div class="input-group" style="margin-bottom: 16px;">
+            <input type="text" id="admin-user-input" placeholder="输入用户名" style="flex: 1; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+            <button class="btn primary sm" onclick="manageUser()">管理</button>
+          </div>
+          <div id="user-management" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">请输入用户名进行管理</div>
+          </div>
+        </div>
+        <div>
+          <h3 style="margin-bottom: 12px;">黑名单管理</h3>
+          <div id="blacklist-list" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">暂无黑名单用户</div>
+          </div>
+        </div>
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">解封申请</h3>
+          <div id="unban-requests" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">暂无解封申请</div>
+          </div>
+        </div>
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">举报管理</h3>
+          <div id="reports-list" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">暂无举报</div>
+          </div>
+        </div>
+        <div style="margin-top: 24px;">
+          <h3 style="margin-bottom: 12px;">反馈管理</h3>
+          <div id="feedbacks-list" style="background: rgba(255,255,255,0.05); border-radius: 8px; padding: 16px;">
+            <div style="color: var(--muted); text-align: center; padding: 20px;">暂无反馈</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 解封申请窗口 -->
+    <div class="result-modal hidden" id="unban-modal">
+      <h2 style="font-size:24px; font-weight:700; margin-bottom: 20px;">申请解封</h2>
+      <p style="margin-bottom: 16px; text-align: center;">您已被管理员拉入黑名单，请申请解封</p>
+      <textarea id="unban-reason" placeholder="请输入解封理由" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff; height: 120px;"></textarea>
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <button class="btn primary" onclick="submitUnbanRequest()">提交申请</button>
+        <button class="btn" onclick="closeUnbanModal()">取消</button>
+      </div>
+    </div>
+    
+    <!-- 反馈窗口 -->
+    <div class="result-modal hidden" id="feedback-modal">
+      <h2 style="font-size:24px; font-weight:700; margin-bottom: 20px;">提交反馈</h2>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-size: 14px;">反馈对象</label>
+        <select id="feedback-target" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+          <option value="admin">管理员</option>
+          <option value="superadmin">超级管理员</option>
+        </select>
+      </div>
+      <div style="margin-bottom: 16px;">
+        <label style="display: block; margin-bottom: 8px; font-size: 14px;">反馈类型</label>
+        <select id="feedback-type" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff;">
+          <option value="bug">Bug报告</option>
+          <option value="suggestion">功能建议</option>
+          <option value="complaint">投诉</option>
+          <option value="other">其他</option>
+        </select>
+      </div>
+      <textarea id="feedback-content" placeholder="请详细描述您的反馈内容" style="width: 100%; padding: 10px; border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; background: rgba(0,0,0,0.6); color: #fff; height: 150px;"></textarea>
+      <div style="display: flex; gap: 8px; margin-top: 16px;">
+        <button class="btn primary" onclick="submitFeedback()">提交反馈</button>
+        <button class="btn" onclick="closeFeedbackModal()">取消</button>
+      </div>
+    </div>
+
+    <!-- 结果 -->
+    <div class="result-modal hidden" id="result-modal">
+      <h2 id="res-title" style="font-size:32px; font-weight:700;">游戏结束</h2>
+      <div class="result-box">
+        <div style="display:flex; justify-content:space-between; margin-bottom:8px;"><span>获胜者</span><span id="res-winner">-</span></div>
+        <div style="display:flex; justify-content:space-between;"><span>倍数</span><span id="res-mult">x1</span></div>
+      </div>
+      <button class="btn primary" onclick="newGame()">再来一局</button>
+      <button class="btn sm mt-4" onclick="backToMenu()">返回菜单</button>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+  <script>
+    // ==================== 常量定义 ====================
+    const SUITS = ['♠','♥','♣','♦'];
+    const RANKS = ['3','4','5','6','7','8','9','10','J','Q','K','A','2'];
+    const VAL = {'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9,'10':10,'J':11,'Q':12,'K':13,'A':14,'2':15,'小王':16,'大王':17};
+    const $ = id => document.getElementById(id);
+
+    // ==================== 游戏状态 ====================
+    const G = {
+      mode: null,
+      players: [],
+      dipai: [],
+      myIdx: 0,
+      cur: 0,
+      last: null,
+      passCnt: 0,
+      phase: 'bid',
+      selected: [],
+      mult: 1,
+      bid: { bidder: -1, pass: 0, round: 0, score: 0 },
+      isScoreMode: false,
+      peer: null,
+      conns: [],
+      isHost: false,
+      roomId: null,
+      roomName: null,
+      robots: new Set(),
+      bc: null,
+      timer: null,
+      joinedLan: false // LAN加入成功标记
+    };
+
+    // ==================== 工具函数 ====================
+    const shuffle = arr => {
+      const a = [...arr];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+
+    const v = c => VAL[c.replace(/[♠♥♣♦]/, '')];
+    const sort = arr => [...arr].sort((a, b) => v(b) - v(a));
+    const isRed = c => c.includes('♥') || c.includes('♦') || c === '大王';
+    const delay = ms => new Promise(r => setTimeout(r, ms));
+
+    // 安全获取玩家
+    const getPlayer = idx => G.players[idx] || null;
+    const getHand = idx => {
+      const p = getPlayer(idx);
+      return p ? p.hand : [];
+    };
+
+    // Toast提示
+    function toast(msg, duration = 2000) {
+      const d = document.createElement('div');
+      d.textContent = msg;
+      Object.assign(d.style, {
+        position: 'fixed', top: '60px', left: '50%', transform: 'translateX(-50%)',
+        background: 'rgba(0,0,0,0.9)', color: '#fff', padding: '8px 16px',
+        borderRadius: '6px', fontSize: '13px', zIndex: '999'
+      });
+      document.body.appendChild(d);
+      setTimeout(() => d.remove(), duration);
+    }
+
+    // ==================== 牌型分析 ====================
+    function analyze(cards) {
+      if (!cards || !cards.length) return null;
+      
+      const vals = cards.map(v);
+      const cnts = {};
+      vals.forEach(x => cnts[x] = (cnts[x] || 0) + 1);
+      const arr = Object.entries(cnts)
+        .map(([k, c]) => ({ v: +k, c }))
+        .sort((a, b) => b.c - a.c || b.v - a.v);
+      const len = cards.length;
+
+      // 王炸
+      if (len === 2 && cards.includes('大王') && cards.includes('小王')) {
+        return { type: 'rocket', main: 17 };
+      }
+      // 单张
+      if (len === 1) return { type: 'single', main: vals[0] };
+      // 对子
+      if (len === 2 && arr[0].c === 2) return { type: 'pair', main: arr[0].v };
+      // 三张
+      if (len === 3 && arr[0].c === 3) return { type: 'triple', main: arr[0].v };
+      // 炸弹
+      if (len === 4 && arr[0].c === 4) return { type: 'bomb', main: arr[0].v };
+      // 三带一
+      if (len === 4 && arr[0].c === 3) return { type: 'triple1', main: arr[0].v };
+      // 三带二
+      if (len === 5 && arr[0].c === 3 && arr[1]?.c === 2) return { type: 'triple2', main: arr[0].v };
+      // 四带二单
+      if (len === 6 && arr[0].c === 4) return { type: 'four2', main: arr[0].v };
+      // 四带二对
+      if (len === 8 && arr[0].c === 4 && arr[1]?.c === 2 && arr[2]?.c === 2) {
+        return { type: 'four22', main: arr[0].v };
+      }
+      
+      // 顺子 (5张及以上连续单张，不含2和王)
+      if (len >= 5 && arr.every(x => x.c === 1) && Math.max(...vals) <= 14) {
+        const s = [...vals].sort((a, b) => a - b);
+        if (s.every((x, i) => i === 0 || x === s[i - 1] + 1)) {
+          return { type: 'straight', main: Math.max(...vals), len };
+        }
+      }
+      
+      // 连对 (3对及以上连续对子，不含2和王)
+      if (len >= 6 && len % 2 === 0 && arr.every(x => x.c === 2) && Math.max(...vals) <= 14) {
+        const s = arr.map(x => x.v).sort((a, b) => a - b);
+        if (s.every((x, i) => i === 0 || x === s[i - 1] + 1)) {
+          return { type: 'pairSeq', main: Math.max(...vals), len: len / 2 };
+        }
+      }
+      
+      // 飞机不带 (2个及以上连续三张)
+      if (len >= 6 && len % 3 === 0 && arr.every(x => x.c === 3) && Math.max(...vals) <= 14) {
+        const s = arr.map(x => x.v).sort((a, b) => a - b);
+        if (s.every((x, i) => i === 0 || x === s[i - 1] + 1)) {
+          return { type: 'plane', main: Math.max(...vals), len: len / 3 };
+        }
+      }
+      
+      // 飞机带单
+      if (len >= 8 && len % 4 === 0) {
+        const triples = arr.filter(x => x.c === 3);
+        if (triples.length >= 2 && triples.length * 4 === len) {
+          const tVals = triples.map(x => x.v).sort((a, b) => a - b);
+          if (tVals.every((x, i) => i === 0 || x === tVals[i - 1] + 1) && Math.max(...tVals) <= 14) {
+            return { type: 'plane1', main: Math.max(...tVals), len: triples.length };
+          }
+        }
+      }
+      
+      // 飞机带对
+      if (len >= 10 && len % 5 === 0) {
+        const triples = arr.filter(x => x.c === 3);
+        const pairs = arr.filter(x => x.c === 2);
+        if (triples.length >= 2 && triples.length === pairs.length && triples.length * 5 === len) {
+          const tVals = triples.map(x => x.v).sort((a, b) => a - b);
+          if (tVals.every((x, i) => i === 0 || x === tVals[i - 1] + 1) && Math.max(...tVals) <= 14) {
+            return { type: 'plane2', main: Math.max(...tVals), len: triples.length };
+          }
+        }
+      }
+      
+      return null;
+    }
+
+    function canBeat(n, o) {
+      if (!o) return true;
+      if (n.type === 'rocket') return true;
+      if (n.type === 'bomb') return o.type === 'bomb' ? n.main > o.main : o.type !== 'rocket';
+      if (n.type !== o.type) return false;
+      if (n.len !== undefined && n.len !== o.len) return false;
+      return n.main > o.main;
+    }
+
+    // ==================== AI逻辑 ====================
+    function aiTurn(idx) {
+      const h = getHand(idx);
+      if (!h || !h.length) return;
+
+      // 构建牌值索引
+      const cnts = {};
+      h.forEach((c, i) => {
+        const vl = v(c);
+        if (!cnts[vl]) cnts[vl] = [];
+        cnts[vl].push({ c, i });
+      });
+
+      // 需要压牌
+      if (G.last && G.last.player !== idx) {
+        const lp = G.last.pattern;
+        
+        // 单张
+        if (lp.type === 'single') {
+          for (let i = lp.main + 1; i <= 17; i++) {
+            if (cnts[i]?.length) {
+              // 优先出最小的能压过的牌
+              return play(idx, [cnts[i][0].c], [cnts[i][0].i]);
+            }
+          }
+        }
+        // 对子
+        else if (lp.type === 'pair') {
+          for (let i = lp.main + 1; i <= 15; i++) {
+            if (cnts[i]?.length >= 2) {
+              return play(idx, cnts[i].slice(0, 2).map(x => x.c), cnts[i].slice(0, 2).map(x => x.i));
+            }
+          }
+        }
+        // 三张/三带一/三带二
+        else if (lp.type === 'triple' || lp.type === 'triple1' || lp.type === 'triple2') {
+          for (let i = lp.main + 1; i <= 15; i++) {
+            if (cnts[i]?.length >= 3) {
+              const cd = cnts[i].slice(0, 3).map(x => x.c);
+              const ix = cnts[i].slice(0, 3).map(x => x.i);
+              if (lp.type === 'triple') return play(idx, cd, ix);
+              // 找带的牌，优先带小牌
+              for (let k in cnts) {
+                if (k != i && cnts[k].length >= (lp.type === 'triple2' ? 2 : 1)) {
+                  const need = lp.type === 'triple2' ? 2 : 1;
+                  cd.push(...cnts[k].slice(0, need).map(x => x.c));
+                  ix.push(...cnts[k].slice(0, need).map(x => x.i));
+                  return play(idx, cd, ix);
+                }
+              }
+            }
+          }
+        }
+        // 顺子
+        else if (lp.type === 'straight') {
+          const result = findStraight(cnts, lp.len, lp.main + 1);
+          if (result) return play(idx, result.cards, result.indices);
+        }
+        // 连对
+        else if (lp.type === 'pairSeq') {
+          const result = findPairSeq(cnts, lp.len, lp.main + 1);
+          if (result) return play(idx, result.cards, result.indices);
+        }
+        
+        // 炸弹压非炸弹/非王炸
+        if (lp.type !== 'bomb' && lp.type !== 'rocket') {
+          // 优先出最小的炸弹
+          let minBomb = null;
+          for (let i = 3; i <= 15; i++) {
+            if (cnts[i]?.length === 4) {
+              if (!minBomb || i < minBomb) {
+                minBomb = i;
+              }
+            }
+          }
+          if (minBomb) {
+            return play(idx, cnts[minBomb].map(x => x.c), cnts[minBomb].map(x => x.i));
+          }
+        }
+        // 炸弹压炸弹
+        else if (lp.type === 'bomb') {
+          let minBomb = null;
+          for (let i = lp.main + 1; i <= 15; i++) {
+            if (cnts[i]?.length === 4) {
+              if (!minBomb || i < minBomb) {
+                minBomb = i;
+              }
+            }
+          }
+          if (minBomb) {
+            return play(idx, cnts[minBomb].map(x => x.c), cnts[minBomb].map(x => x.i));
+          }
+        }
+        
+        // 王炸
+        if (cnts[16] && cnts[17]) {
+          // 只有在必要时才出王炸
+          if (lp.type === 'bomb' || lp.type === 'rocket') {
+            return play(idx, ['小王', '大王'], [h.indexOf('小王'), h.indexOf('大王')]);
+          }
+        }
+        
+        return pass(idx);
+      }
+
+      // 自由出牌 - 智能策略
+      const sorted = sort(h);
+      
+      // 优先出顺子
+      const straightResult = findBestStraight(cnts);
+      if (straightResult) return play(idx, straightResult.cards, straightResult.indices);
+      
+      // 出连对
+      const pairSeqResult = findBestPairSeq(cnts);
+      if (pairSeqResult) return play(idx, pairSeqResult.cards, pairSeqResult.indices);
+      
+      // 出三张
+      for (let i = 3; i <= 15; i++) {
+        if (cnts[i]?.length === 3) {
+          const cd = cnts[i].slice(0, 3).map(x => x.c);
+          const ix = cnts[i].slice(0, 3).map(x => x.i);
+          // 带单张，优先带最小的单张
+          let minSingle = null;
+          for (let k in cnts) {
+            if (k != i && cnts[k].length >= 1) {
+              const val = parseInt(k);
+              if (!minSingle || val < minSingle) {
+                minSingle = val;
+              }
+            }
+          }
+          if (minSingle) {
+            cd.push(cnts[minSingle][0].c);
+            ix.push(cnts[minSingle][0].i);
+          }
+          return play(idx, cd, ix);
+        }
+      }
+      
+      // 出对子
+      for (let i = 3; i <= 15; i++) {
+        if (cnts[i]?.length === 2) {
+          return play(idx, cnts[i].map(x => x.c), cnts[i].map(x => x.i));
+        }
+      }
+      
+      // 出单张，优先出最小的单张
+      const sortedValues = Object.keys(cnts).map(Number).sort((a, b) => a - b);
+      for (let val of sortedValues) {
+        if (cnts[val]?.length) {
+          return play(idx, [cnts[val][0].c], [cnts[val][0].i]);
+        }
+      }
+    }
+
+    // 查找顺子
+    function findStraight(cnts, needLen, minMain) {
+      for (let start = minMain || 3; start <= 14 - needLen + 1; start++) {
+        const cards = [], indices = [];
+        let valid = true;
+        for (let i = 0; i < needLen; i++) {
+          const val = start + i;
+          if (!cnts[val] || !cnts[val].length) { valid = false; break; }
+          cards.push(cnts[val][0].c);
+          indices.push(cnts[val][0].i);
+        }
+        if (valid) return { cards, indices };
+      }
+      return null;
+    }
+
+    // 查找最佳顺子（最长）
+    function findBestStraight(cnts) {
+      for (let len = 12; len >= 5; len--) {
+        const result = findStraight(cnts, len, 3);
+        if (result) return result;
+      }
+      return null;
+    }
+
+    // 查找连对
+    function findPairSeq(cnts, needLen, minMain) {
+      for (let start = minMain || 3; start <= 14 - needLen + 1; start++) {
+        const cards = [], indices = [];
+        let valid = true;
+        for (let i = 0; i < needLen; i++) {
+          const val = start + i;
+          if (!cnts[val] || cnts[val].length < 2) { valid = false; break; }
+          cards.push(cnts[val][0].c, cnts[val][1].c);
+          indices.push(cnts[val][0].i, cnts[val][1].i);
+        }
+        if (valid) return { cards, indices };
+      }
+      return null;
+    }
+
+    // 查找最佳连对
+    function findBestPairSeq(cnts) {
+      for (let len = 10; len >= 3; len--) {
+        const result = findPairSeq(cnts, len, 3);
+        if (result) return result;
+      }
+      return null;
+    }
+
+    function aiBid(idx) {
+      const h = getHand(idx);
+      if (!h) return 0;
+      
+      let score = 0;
+      h.forEach(c => {
+        const vl = v(c);
+        if (vl === 17) score += 6;
+        else if (vl === 16) score += 5;
+        else if (vl === 15) score += 3;
+      });
+      
+      const cnts = {};
+      h.forEach(x => cnts[v(x)] = (cnts[v(x)] || 0) + 1);
+      Object.values(cnts).forEach(x => { if (x === 4) score += 8; });
+      
+      if (score >= 10) return 1;
+      if (score >= 6 && Math.random() > 0.5) return 1;
+      return 0;
+    }
+
+    // ==================== 游戏流程 ====================
+    function play(idx, cards, indices) {
+      const p = getPlayer(idx);
+      if (!p) return;
+      
+      const pattern = analyze(cards);
+      if (!pattern) return;
+      
+      G.last = { cards, pattern, player: idx };
+      G.passCnt = 0;
+
+      // 从大到小删除，避免索引错位
+      indices.sort((a, b) => b - a);
+      indices.forEach(i => p.hand.splice(i, 1));
+
+      // 炸弹/王炸翻倍
+      if (pattern.type === 'bomb' || pattern.type === 'rocket') {
+        G.mult *= 2;
+        $('mult').textContent = G.mult;
+        toast(pattern.type === 'rocket' ? '王炸！' : '炸弹！');
+      }
+
+      if (!p.hand.length) {
+        render();
+        setTimeout(() => endGame(idx), 600);
+        return;
+      }
+      nextTurn();
+    }
+
+    function pass(idx) {
+      G.passCnt++;
+      if (G.passCnt >= 2) {
+        G.last = null;
+        G.passCnt = 0;
+      }
+      nextTurn();
+    }
+
+    function nextTurn() {
+      G.cur = (G.cur + 1) % 3;
+      G.selected = [];
+      render();
+
+      if (G.mode === 'online' || G.mode === 'lan') broadcastState();
+      checkAI();
+    }
+
+    function checkAI() {
+      clearTimeout(G.timer);
+      if (G.phase !== 'bid' && G.phase !== 'play') return;
+      
+      const p = getPlayer(G.cur);
+      if (p && p.isAI) {
+        $('act-row').innerHTML = '<span style="color:var(--muted);font-size:13px;">思考中...</span>';
+        G.timer = setTimeout(() => {
+          if (G.phase === 'bid') handleBid(G.cur, aiBid(G.cur));
+          else aiTurn(G.cur);
+        }, 800 + Math.random() * 400);
+      }
+    }
+
+    function handleBid(idx, act) {
+      const p = getPlayer(idx);
+      if (!p) return;
+      
+      if (act > 0) {
+        if (G.isScoreMode) {
+          // 叫分模式
+          if (act > G.bid.score) {
+            G.bid.bidder = idx;
+            G.bid.score = act;
+            G.bid.pass = 0;
+            toast(`${p.name} 叫 ${act} 分`);
+          } else {
+            toast('叫分必须高于当前最高分数');
+            return;
+          }
+        } else {
+          // 传统模式
+          if (G.bid.bidder === -1) {
+            // 第一次叫地主
+            G.bid.bidder = idx;
+            G.bid.pass = 0;
+            toast(`${p.name} 叫地主`);
+          } else {
+            // 抢地主，倍数翻倍
+            G.bid.bidder = idx;
+            G.bid.pass = 0;
+            G.mult *= 2;
+            $('mult').textContent = G.mult;
+            toast(`${p.name} 抢地主！倍数 x${G.mult}`);
+          }
+        }
+      } else {
+        G.bid.pass++;
+        toast(`${p.name} 不叫`);
+        
+        // 三人都不叫，重新发牌
+        if (G.bid.pass >= 3 && G.bid.bidder === -1) {
+          toast('都不叫，重新发牌');
+          setTimeout(() => {
+            initGame();
+            restoreRoles();
+            G.bid = { bidder: -1, pass: 0, round: 0, score: 0 };
+            G.cur = Math.floor(Math.random() * 3);
+            render();
+            showBidUI();
+            checkAI();
+          }, 1000);
+          return;
+        }
+        
+        // 有人叫过地主，后面两人都不抢
+        if (G.bid.bidder !== -1 && G.bid.pass >= 2) {
+          finishBid();
+          return;
+        }
+      }
+      
+      G.bid.round++;
+      G.cur = (G.cur + 1) % 3;
+      
+      // 叫地主轮数结束
+      if (G.bid.round >= 3 && G.bid.bidder !== -1) {
+        finishBid();
+        return;
+      }
+      
+      render();
+      checkAI();
+    }
+
+    function finishBid() {
+      const l = G.bid.bidder;
+      if (l === -1) return;
+      
+      const landlord = getPlayer(l);
+      if (!landlord) return;
+      
+      landlord.isLandlord = true;
+      landlord.hand.push(...G.dipai);
+      landlord.hand = sort(landlord.hand);
+      G.cur = l;
+      G.phase = 'play';
+      
+      // 叫分模式下，底分倍数设置为叫分的分数
+      if (G.isScoreMode && G.bid.score > 0) {
+        G.mult = G.bid.score;
+        $('mult').textContent = G.mult;
+        toast(`${landlord.name} 成为地主，底分 ${G.bid.score} 分`);
+      } else {
+        toast(`${landlord.name} 成为地主`);
+      }
+      
+      render();
+      
+      clearTimeout(G.timer);
+      G.timer = setTimeout(() => {
+        const curPlayer = getPlayer(G.cur);
+        if (curPlayer && curPlayer.isAI) aiTurn(G.cur);
+      }, 1500);
+    }
+
+    // ==================== UI渲染 ====================
+    function render() {
+      const lIdx = (G.myIdx + 1) % 3, rIdx = (G.myIdx + 2) % 3;
+      renderOpp('l', lIdx);
+      renderOpp('r', rIdx);
+      renderDipai();
+      renderPlayed();
+      renderHand();
+      renderActions();
+    }
+
+    function renderOpp(pos, idx) {
+      const p = getPlayer(idx);
+      if (!p) return;
+      
+      const cnt = p.hand.length;
+      $(`backs-${pos}`).innerHTML = Array(Math.min(cnt, 17))
+        .fill('<div class="back-card"></div>')
+        .join('');
+      
+      let name = p.name;
+      if (p.isAI) name += '<span style="color:#a855f7;font-size:9px;margin-left:4px;">AI</span>';
+      if (p.isLandlord) name += '<span style="color:var(--warning);font-size:9px;margin-left:4px;">地主</span>';
+      
+      $(`name-${pos}`).innerHTML = name;
+      $(`cnt-${pos}`).textContent = cnt + '张';
+    }
+
+    function renderDipai() {
+      const box = $('dipai-box');
+      if (G.phase === 'play') {
+        box.innerHTML = '<span class="dipai-label">底牌</span>' +
+          G.dipai.map(c => `<div class="card mini ${isRed(c) ? 'red' : ''}">${c}</div>`).join('');
+      } else {
+        box.innerHTML = '<span class="dipai-label">底牌</span>' +
+          Array(3).fill('<div class="back-card"></div>').join('');
+      }
+    }
+
+    function renderPlayed() {
+      $('play-l').innerHTML = '';
+      $('play-r').innerHTML = '';
+      $('play-main').innerHTML = '';
+      
+      if (!G.last) return;
+      
+      const html = G.last.cards
+        .map(c => `<div class="card mini ${isRed(c) ? 'red' : ''}">${c}</div>`)
+        .join('');
+      
+      const lIdx = (G.myIdx + 1) % 3, rIdx = (G.myIdx + 2) % 3;
+      if (G.last.player === G.myIdx) $('play-main').innerHTML = html;
+      else if (G.last.player === lIdx) $('play-l').innerHTML = html;
+      else if (G.last.player === rIdx) $('play-r').innerHTML = html;
+    }
+
+    function renderHand() {
+      const me = getPlayer(G.myIdx);
+      if (!me) return;
+      
+      let name = me.name;
+      if (me.isLandlord) name += '<span style="color:var(--warning);margin-left:4px;">地主</span>';
+      
+      $('my-name').innerHTML = name;
+      $('my-cnt').textContent = me.hand.length + '张';
+      $('my-hand').innerHTML = me.hand.map((c, i) =>
+        `<div class="card ${isRed(c) ? 'red' : ''} ${c.includes('王') ? 'joker' : ''} ${G.selected.includes(i) ? 'selected' : ''}" onclick="toggleCard(${i})">${c}</div>`
+      ).join('');
+    }
+
+    function renderActions() {
+      const p = getPlayer(G.cur);
+      if (!p) return;
+      
+      if (p.isAI) {
+        $('act-row').innerHTML = '<span style="color:var(--muted);font-size:13px;">思考中...</span>';
+        return;
+      }
+      
+      // 本地多人换人逻辑
+      if (G.mode === 'local' && G.cur !== G.myIdx) {
+        showLocalMask();
+        return;
+      }
+      
+      // 网络等待
+      if ((G.mode === 'online' || G.mode === 'lan') && G.cur !== G.myIdx) {
+        $('act-row').innerHTML = '<span style="color:var(--muted);font-size:13px;">等待对手...</span>';
+        return;
+      }
+
+      if (G.phase === 'bid') showBidUI();
+      else if (G.phase === 'play') showPlayUI();
+    }
+
+    function showBidUI() {
+      if (G.isScoreMode) {
+        // 叫分模式
+        $('act-row').innerHTML = `
+          <button class="opt-btn opt-grab" onclick="doBid(1)">1分</button>
+          <button class="opt-btn opt-grab" onclick="doBid(2)">2分</button>
+          <button class="opt-btn opt-grab" onclick="doBid(3)">3分</button>
+          <button class="opt-btn opt-skip" onclick="doBid(0)">不叫</button>
+        `;
+      } else {
+        // 传统模式
+        const canGrab = G.bid.bidder === -1;
+        $('act-row').innerHTML = `
+          <button class="opt-btn opt-grab" onclick="doBid(1)">${canGrab ? '叫地主' : '抢地主'}</button>
+          <button class="opt-btn opt-skip" onclick="doBid(0)">${canGrab ? '不叫' : '不抢'}</button>
+        `;
+      }
+    }
+
+    function showPlayUI() {
+      const canPass = G.last && G.last.player !== G.myIdx;
+      $('act-row').innerHTML = `
+        <button class="btn primary sm" onclick="doPlay()">出牌</button>
+        <button class="btn sm" onclick="doHint()">提示</button>
+        ${canPass ? '<button class="btn sm" onclick="doPass()">不出</button>' : ''}
+      `;
+    }
+
+    function toggleCard(i) {
+      if (G.phase !== 'play') return;
+      if (G.mode === 'local' && G.cur !== G.myIdx) return;
+      if ((G.mode === 'online' || G.mode === 'lan') && G.cur !== G.myIdx) return;
+      
+      const idx = G.selected.indexOf(i);
+      if (idx >= 0) G.selected.splice(idx, 1);
+      else G.selected.push(i);
+      renderHand();
+    }
+
+    // ==================== 玩家操作 ====================
+    function doBid(act) {
+      if (G.mode === 'local') {
+        handleBid(G.cur, act);
+      } else {
+        handleBid(G.myIdx, act);
+        if (G.mode === 'online' || G.mode === 'lan') {
+          broadcast({ type: 'bid', idx: G.myIdx, act });
+        }
+      }
+    }
+
+    function doPlay() {
+      if (!G.selected.length) return toast('请选择要出的牌');
+      
+      const me = getPlayer(G.myIdx);
+      if (!me) return;
+      
+      const cards = G.selected.map(i => me.hand[i]);
+      const pattern = analyze(cards);
+      
+      if (!pattern) {
+        if (cards.length === 1) return toast('单张');
+        if (cards.length === 3) return toast('请选择三张');
+        if (cards.length === 4) return toast('请选择炸弹或三带一');
+        return toast('无效牌型，请重新选择');
+      }
+      if (G.last && G.last.player !== G.myIdx && !canBeat(pattern, G.last.pattern)) {
+        return toast('牌型大小不够，无法出牌');
+      }
+      
+      const selectedCopy = [...G.selected];
+      if (G.mode === 'online' || G.mode === 'lan') {
+        broadcast({ type: 'play', idx: G.myIdx, cards, indices: selectedCopy });
+      }
+      play(G.myIdx, cards, selectedCopy);
+      G.selected = [];
+    }
+
+    function doPass() {
+      G.selected = [];
+      pass(G.myIdx);
+      if (G.mode === 'online' || G.mode === 'lan') {
+        broadcast({ type: 'pass', idx: G.myIdx });
+      }
+    }
+
+    function doHint() {
+      if (G.phase !== 'play') return;
+      G.selected = [];
+      
+      const me = getPlayer(G.myIdx);
+      if (!me) return;
+      
+      const h = me.hand;
+      const cnts = {};
+      h.forEach((c, i) => {
+        const vl = v(c);
+        if (!cnts[vl]) cnts[vl] = [];
+        cnts[vl].push({ c, i });
+      });
+
+      // 需要压牌
+      if (G.last && G.last.player !== G.myIdx) {
+        const lp = G.last.pattern;
+        
+        if (lp.type === 'single') {
+          for (let i = lp.main + 1; i <= 17; i++) {
+            if (cnts[i]?.length) {
+              G.selected = [cnts[i][0].i];
+              renderHand();
+              return;
+            }
+          }
+        }
+        else if (lp.type === 'pair') {
+          for (let i = lp.main + 1; i <= 15; i++) {
+            if (cnts[i]?.length >= 2) {
+              G.selected = cnts[i].slice(0, 2).map(x => x.i);
+              renderHand();
+              return;
+            }
+          }
+        }
+        else if (lp.type === 'triple' || lp.type === 'triple1' || lp.type === 'triple2') {
+          for (let i = lp.main + 1; i <= 15; i++) {
+            if (cnts[i]?.length >= 3) {
+              G.selected = cnts[i].slice(0, 3).map(x => x.i);
+              if (lp.type !== 'triple') {
+                for (let k in cnts) {
+                  if (k != i && cnts[k].length >= (lp.type === 'triple2' ? 2 : 1)) {
+                    const need = lp.type === 'triple2' ? 2 : 1;
+                    G.selected.push(...cnts[k].slice(0, need).map(x => x.i));
+                    break;
+                  }
+                }
+              }
+              renderHand();
+              return;
+            }
+          }
+        }
+        else if (lp.type === 'straight') {
+          const result = findStraight(cnts, lp.len, lp.main + 1);
+          if (result) {
+            G.selected = result.indices;
+            renderHand();
+            return;
+          }
+        }
+        else if (lp.type === 'pairSeq') {
+          const result = findPairSeq(cnts, lp.len, lp.main + 1);
+          if (result) {
+            G.selected = result.indices;
+            renderHand();
+            return;
+          }
+        }
+        
+        // 炸弹
+        if (lp.type !== 'rocket') {
+          for (let i = (lp.type === 'bomb' ? lp.main + 1 : 3); i <= 15; i++) {
+            if (cnts[i]?.length === 4) {
+              G.selected = cnts[i].map(x => x.i);
+              renderHand();
+              return;
+            }
+          }
+        }
+        
+        // 王炸
+        if (cnts[16] && cnts[17]) {
+          G.selected = [cnts[16][0].i, cnts[17][0].i];
+          renderHand();
+          return;
+        }
+        
+        toast('没有能压过的牌');
+        return;
+      }
+
+      // 自由出牌提示
+      const sorted = sort(h);
+      G.selected = [h.indexOf(sorted[sorted.length - 1])];
+      renderHand();
+    }
+
+    // ==================== 本地多人 ====================
+    function showLocalMask() {
+      const p = getPlayer(G.cur);
+      if (p) $('lm-title').textContent = p.name;
+      $('local-mask').classList.remove('hidden');
+    }
+
+    function lmConfirm() {
+      $('local-mask').classList.add('hidden');
+      G.myIdx = G.cur;
+      render();
+    }
+
+    // ==================== 流程控制 ====================
+    function showScreen(id) {
+      document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+      $(id).classList.add('active');
+    }
+
+    function backToMenu() {
+      clearTimeout(G.timer);
+      if (G.peer) G.peer.destroy();
+      if (G.bc) G.bc.close();
+      G.conns = [];
+      G.robots = new Set();
+      G.joinedLan = false;
+      G.myIdx = 0;
+      $('result-modal').classList.add('hidden');
+      $('local-mask').classList.add('hidden');
+      showScreen('menu-screen');
+    }
+
+    function initGame() {
+      const deck = shuffle([...SUITS.flatMap(s => RANKS.map(r => s + r)), '小王', '大王']);
+      G.players = [
+        { name: '玩家1', hand: sort(deck.slice(0, 17)), isAI: false, isLandlord: false },
+        { name: '玩家2', hand: sort(deck.slice(17, 34)), isAI: false, isLandlord: false },
+        { name: '玩家3', hand: sort(deck.slice(34, 51)), isAI: false, isLandlord: false }
+      ];
+      G.dipai = deck.slice(51);
+      G.cur = 0;
+      G.last = null;
+      G.passCnt = 0;
+      G.phase = 'bid';
+      G.selected = [];
+      G.mult = 1;
+      G.bid = { bidder: -1, pass: 0, round: 0, score: 0 };
+      $('mult').textContent = 1;
+    }
+
+    function restoreRoles() {
+      if (G.mode === 'ai') {
+        G.players[1].isAI = true;
+        G.players[1].name = 'AI-1';
+        G.players[2].isAI = true;
+        G.players[2].name = 'AI-2';
+        G.robots.add(1);
+        G.robots.add(2);
+      } else {
+        G.robots.forEach(i => {
+          if (G.players[i]) {
+            G.players[i].isAI = true;
+            G.players[i].name = 'AI-' + i;
+          }
+        });
+      }
+    }
+
+    function startGame(mode) {
+      G.mode = mode;
+      if (mode === 'ai') {
+        initGame();
+        restoreRoles();
+        G.myIdx = 0;
+        G.cur = Math.floor(Math.random() * 3);
+        $('mode-text').textContent = '对战电脑';
+        showScreen('game-screen');
+        render();
+        checkAI();
+      } else if (mode === 'local') {
+        initGame();
+        G.myIdx = 0;
+        $('mode-text').textContent = '本地多人';
+        showScreen('game-screen');
+        showLocalMask();
+      } else if (mode === 'lan') {
+        initLanLobby();
+      } else if (mode === 'online') {
+        initOnlineLobby();
+      } else if (mode === 'score') {
+        initGame();
+        restoreRoles();
+        G.myIdx = 0;
+        G.cur = Math.floor(Math.random() * 3);
+        G.isScoreMode = true;
+        $('mode-text').textContent = '叫分玩法';
+        showScreen('game-screen');
+        render();
+        checkAI();
+      }
+    }
+
+    function endGame(winner) {
+      G.phase = 'end';
+      clearTimeout(G.timer);
+      
+      const landIdx = G.players.findIndex(p => p.isLandlord);
+      const landWin = winner === landIdx;
+      
+      let win = winner === G.myIdx;
+      if (G.mode === 'local') win = true;
+      else if (!G.players[G.myIdx].isLandlord && !landWin) win = true;
+      
+      const m = $('result-modal');
+      m.classList.remove('hidden', 'win', 'lose');
+      m.classList.add(win ? 'win' : 'lose');
+      $('res-title').textContent = win ? '胜利' : '失败';
+      
+      const winnerPlayer = getPlayer(winner);
+      $('res-winner').textContent = winnerPlayer 
+        ? `${winnerPlayer.name}(${winnerPlayer.isLandlord ? '地主' : '农民'})`
+        : '-';
+      $('res-mult').textContent = 'x' + G.mult;
+    }
+
+    function newGame() {
+      $('result-modal').classList.add('hidden');
+      G.bid = { bidder: -1, pass: 0, round: 0 };
+      G.selected = [];
+      
+      if (G.mode === 'ai') {
+        initGame();
+        restoreRoles();
+        G.cur = Math.floor(Math.random() * 3);
+        render();
+        checkAI();
+      } else if (G.mode === 'local') {
+        initGame();
+        G.myIdx = 0;
+        showLocalMask();
+      } else {
+        initGame();
+        restoreRoles();
+        G.cur = Math.floor(Math.random() * 3);
+        render();
+        checkAI();
+      }
+    }
+
+    // ==================== 联机逻辑 ====================
+    function initLanLobby() {
+      G.mode = 'lan';
+      G.isHost = true;
+      G.joinedLan = false;
+      showScreen('lobby-screen');
+      $('lobby-title').textContent = '本地联机';
+      $('join-group').classList.remove('hidden');
+      $('add-ai-btn').classList.remove('hidden');
+      $('start-btn').classList.remove('hidden');
+      G.roomId = Math.random().toString(36).slice(2, 8).toUpperCase();
+      $('room-code').textContent = G.roomId;
+      G.bc = new BroadcastChannel('ddz_lan_' + G.roomId);
+      G.bc.onmessage = e => handleLanMsg(e.data);
+      updateLobbySlots();
+    }
+
+    function joinLanRoom() {
+      const code = $('join-input').value.trim().toUpperCase();
+      if (!code) return toast('请输入房间号');
+      
+      G.mode = 'lan';
+      G.isHost = false;
+      G.roomId = code;
+      
+      try {
+        G.bc = new BroadcastChannel('ddz_lan_' + code);
+        G.bc.onmessage = e => handleLanMsg(e.data);
+        G.bc.onclose = () => toast('本地网络连接已断开');
+        G.bc.postMessage({ type: 'join' });
+        
+        toast('正在寻找房间...');
+        setTimeout(() => {
+          if (!G.joinedLan) toast('未找到房间，请检查房间号是否正确');
+        }, 2000);
+      } catch (error) {
+        toast('本地网络连接失败: ' + error.message);
+      }
+    }
+
+    function joinCurrentMode() {
+      if (G.mode === 'lan') joinLanRoom();
+      else joinRoom();
+    }
+
+    function handleLanMsg(d) {
+      // 主机收到加入请求
+      if (d.type === 'join' && G.isHost) {
+        const newIdx = G.conns.length + 1;
+        if (newIdx >= 3) return; // 已满
+        G.conns.push({});
+        G.bc.postMessage({ type: 'joined', idx: newIdx, total: G.conns.length + 1 });
+        updateLobbySlots();
+      }
+      
+      // 客户端收到加入确认
+      if (d.type === 'joined' && !G.isHost && !G.joinedLan) {
+        G.joinedLan = true;
+        G.myIdx = d.idx;
+        toast(`已加入房间，你是玩家${d.idx + 1}`);
+        updateLobbySlots();
+      }
+      
+      // 收到开始信号
+      if (d.type === 'start') {
+        startFromLan(d);
+      }
+      
+      // 状态同步
+      if (d.type === 'state') {
+        Object.assign(G, d.state);
+        render();
+      }
+    }
+
+    function startFromLan(d) {
+      G.players = d.players.map((p, i) => ({
+        ...p,
+        hand: i === G.myIdx ? p.hand : p.hand.length
+      }));
+      G.dipai = d.dipai;
+      G.cur = d.cur;
+      G.bid = d.bid;
+      G.phase = 'bid';
+      $('mode-text').textContent = '本地联机';
+      showScreen('game-screen');
+      render();
+    }
+
+    // ==================== 网络逻辑 (PeerJS) ====================
+    function initOnlineLobby() {
+      G.mode = 'online';
+      G.isHost = true;
+      showScreen('lobby-screen');
+      $('lobby-title').textContent = '网络联机';
+      $('join-group').classList.remove('hidden');
+      $('add-ai-btn').classList.remove('hidden');
+      $('start-btn').classList.remove('hidden');
+      
+      // 使用自定义短ID作为房间号
+      G.roomId = 'DDZ' + Math.random().toString(36).slice(2, 6).toUpperCase();
+      $('room-code').textContent = G.roomId;
+      $('room-code').style.fontSize = '28px'; // 稍微小一点因为ID长了
+      
+      // 直接使用默认的PeerJS服务器，避免自定义服务器连接失败的问题
+      try {
+        if (G.peer) {
+          G.peer.destroy();
+        }
+        
+        // 使用默认的PeerJS服务器
+        G.peer = new Peer(G.roomId, {
+          debug: 3 // 启用详细调试信息
+        });
+        
+        G.peer.on('open', id => {
+          console.log('房间创建成功:', id);
+          toast('房间已创建: ' + id);
+        });
+        
+        G.peer.on('connection', conn => setupConn(conn));
+        
+        G.peer.on('error', e => {
+          console.error('PeerJS错误:', e);
+          let errorMsg = '网络错误';
+          switch (e.type) {
+            case 'unavailable-id':
+              errorMsg = '房间ID已被使用，请重新创建房间';
+              break;
+            case 'network':
+              errorMsg = '网络连接失败，请检查网络连接后重试';
+              break;
+            case 'socket-error':
+              errorMsg = '服务器连接失败，请稍后重试';
+              break;
+            default:
+              errorMsg = '网络错误: ' + e.type + '，请稍后重试';
+          }
+          toast(errorMsg);
+        });
+        
+        G.peer.on('disconnected', () => {
+          console.log('PeerJS连接断开');
+          toast('连接已断开，正在尝试重连...');
+          // 尝试重新连接
+          setTimeout(() => {
+            G.peer.reconnect();
+          }, 2000);
+        });
+        
+        G.peer.on('close', () => {
+          console.log('PeerJS连接关闭');
+        });
+      } catch (error) {
+        console.error('创建房间失败:', error);
+        toast('创建房间失败: ' + error.message + '，请检查网络连接后重试');
+      }
+      
+      updateLobbySlots();
+    }
+
+    function joinRoom(roomId) {
+      let code = roomId || $('join-input').value.trim().toUpperCase();
+      if (!code) return toast('请输入房间号');
+      
+      // 如果用户没有输入DDZ前缀，自动添加
+      if (!code.startsWith('DDZ')) code = 'DDZ' + code;
+      
+      G.mode = 'online';
+      G.isHost = false;
+      toast('正在连接到房间...');
+      
+      // 直接使用默认的PeerJS服务器，避免自定义服务器连接失败的问题
+      try {
+        if (G.peer) {
+          G.peer.destroy();
+        }
+        
+        // 使用默认的PeerJS服务器
+        G.peer = new Peer({
+          debug: 3 // 启用详细调试信息
+        });
+        
+        G.peer.on('open', (id) => {
+          console.log('PeerJS初始化成功，ID:', id);
+          console.log('尝试连接房间:', code);
+          
+          // 延迟一点时间确保PeerJS完全初始化
+          setTimeout(() => {
+            const conn = G.peer.connect(code);
+            setupConn(conn);
+          }, 500);
+          
+          // 连接超时检测
+          setTimeout(() => {
+            if (!G.conns.length) {
+              toast('连接超时，请检查房间号是否正确或网络连接是否正常');
+            }
+          }, 8000); // 增加超时时间到8秒
+        });
+        
+        G.peer.on('error', e => {
+          console.error('连接错误:', e);
+          let errorMsg = '连接失败';
+          switch (e.type) {
+            case 'unavailable-id':
+              errorMsg = '房间不存在，请检查房间号是否正确';
+              break;
+            case 'network':
+              errorMsg = '网络连接失败，请检查网络连接后重试';
+              break;
+            case 'peer-unavailable':
+              errorMsg = '房间已关闭或不存在';
+              break;
+            case 'socket-error':
+              errorMsg = '服务器连接失败，请稍后重试';
+              break;
+            case 'ssl-error':
+              errorMsg = 'SSL连接错误，请检查网络设置';
+              break;
+            default:
+              errorMsg = '连接失败: ' + e.type + '，请稍后重试';
+          }
+          toast(errorMsg);
+        });
+        
+        G.peer.on('disconnected', () => {
+          console.log('PeerJS连接断开');
+          toast('连接已断开，正在尝试重连...');
+          // 尝试重新连接
+          setTimeout(() => {
+            G.peer.reconnect();
+          }, 2000);
+        });
+        
+        G.peer.on('close', () => {
+          console.log('PeerJS连接关闭');
+        });
+      } catch (error) {
+        console.error('网络连接初始化失败:', error);
+        toast('网络连接初始化失败: ' + error.message + '，请检查网络连接后重试');
+      }
+    }
+
+    function setupConn(conn) {
+      conn.on('open', () => {
+        G.conns.push(conn);
+        if (G.isHost) {
+          conn.send({ type: 'welcome', idx: G.conns.length });
+          updateLobbySlots();
+        }
+      });
+      conn.on('data', d => handleNetData(conn, d));
+      conn.on('close', () => {
+        G.conns = G.conns.filter(c => c !== conn);
+        updateLobbySlots();
+        toast('有人断开，正在尝试重连...');
+        // 尝试重连
+        attemptReconnect();
+      });
+    }
+
+    function addAI() {
+      if (!G.isHost) return;
+      const cnt = 1 + G.conns.length + G.robots.size;
+      if (cnt >= 3) return toast('已满');
+      
+      let idx = -1;
+      if (!G.robots.has(1)) idx = 1;
+      else if (!G.robots.has(2)) idx = 2;
+      
+      if (idx !== -1) {
+        G.robots.add(idx);
+        updateLobbySlots();
+        toast('AI已加入');
+      }
+    }
+
+    function updateLobbySlots() {
+      const s = $('slots').querySelectorAll('.slot');
+      s.forEach((x, i) => {
+        x.className = 'slot';
+        x.innerHTML = '<span>空位</span>';
+      });
+      
+      s[0].className = 'slot filled me';
+      s[0].innerHTML = '<span>我</span>';
+      
+      G.conns.forEach((c, i) => {
+        const idx = i + 1;
+        if (idx < 3) {
+          s[idx].className = 'slot filled human';
+          s[idx].innerHTML = `<span>玩家${idx + 1}</span>`;
+        }
+      });
+      
+      G.robots.forEach(idx => {
+        if (idx < 3) {
+          s[idx].className = 'slot filled ai';
+          s[idx].innerHTML = `<span>AI-${idx}</span>`;
+        }
+      });
+      
+      const total = 1 + G.conns.length + G.robots.size;
+      $('start-btn').disabled = total < 3;
+      $('start-btn').textContent = total >= 3 ? '开始' : `等待(${total}/3)`;
+      $('add-ai-btn').classList.toggle('hidden', total >= 3);
+    }
+
+    function handleNetData(conn, d) {
+      if (d.type === 'welcome') {
+        G.myIdx = d.idx;
+        $('room-code').textContent = '已加入';
+        $('join-group').classList.add('hidden');
+        $('add-ai-btn').classList.add('hidden');
+        $('start-btn').classList.add('hidden');
+        updateLobbySlots();
+      }
+      if (d.type === 'start') startFromNet(d);
+      if (d.type === 'bid') handleBid(d.idx, d.act);
+      if (d.type === 'play') play(d.idx, d.cards, d.indices);
+      if (d.type === 'pass') pass(d.idx);
+      if (d.type === 'state') {
+        Object.assign(G, d.state);
+        render();
+      }
+    }
+
+    function startFromNet(d) {
+      G.players = d.players.map((p, i) => ({
+        ...p,
+        hand: i === G.myIdx ? p.hand : p.hand.length
+      }));
+      G.dipai = d.dipai;
+      G.cur = d.cur;
+      G.bid = d.bid;
+      G.phase = 'bid';
+      d.players.forEach((p, i) => { if (p.isAI) G.robots.add(i); });
+      $('mode-text').textContent = '网络联机';
+      showScreen('game-screen');
+      render();
+    }
+
+    function startNetGame() {
+      const total = 1 + G.conns.length + G.robots.size;
+      if (total < 3) return toast('人不够');
+      
+      initGame();
+      restoreRoles();
+      G.cur = Math.floor(Math.random() * 3);
+      G.bid = { bidder: -1, pass: 0, round: 0 };
+      
+      // 构建玩家数据，每个玩家只能看到自己的手牌
+      const payload = {
+        type: 'start',
+        players: G.players.map((p, i) => ({
+          ...p,
+          hand: i === 0 ? p.hand : p.hand.length
+        })),
+        dipai: G.dipai,
+        cur: G.cur,
+        bid: G.bid
+      };
+      
+      // 对于每个连接的玩家，发送他们自己的手牌
+      if (G.mode === 'online') {
+        G.conns.forEach((c, i) => {
+          const playerPayload = {
+            ...payload,
+            players: G.players.map((p, j) => ({
+              ...p,
+              hand: j === (i + 1) ? p.hand : (j === 0 ? p.hand.length : p.hand.length)
+            }))
+          };
+          c.send(playerPayload);
+        });
+      }
+      if (G.mode === 'lan') {
+        G.bc.postMessage(payload);
+      }
+      
+      $('mode-text').textContent = G.mode === 'lan' ? '本地联机' : '网络联机';
+      showScreen('game-screen');
+      render();
+      checkAI();
+    }
+
+    // 节流函数，限制函数执行频率
+    function throttle(func, limit) {
+      let inThrottle;
+      return function() {
+        const args = arguments;
+        const context = this;
+        if (!inThrottle) {
+          func.apply(context, args);
+          inThrottle = true;
+          setTimeout(() => inThrottle = false, limit);
+        }
+      }
+    }
+    
+    // 优化的游戏状态缓存函数
+    const saveGameStateThrottled = throttle((state) => {
+      try {
+        localStorage.setItem('ddz_game_state', JSON.stringify(state));
+      } catch (error) {
+        console.error('保存游戏状态失败:', error);
+      }
+    }, 1000); // 限制为每秒最多写入一次
+    
+    function broadcastState() {
+      const state = {
+        players: G.players.map(p => ({ ...p, hand: p.hand.length })),
+        cur: G.cur,
+        last: G.last,
+        passCnt: G.passCnt,
+        phase: G.phase,
+        mult: G.mult,
+        bid: G.bid
+      };
+      
+      // 本地缓存游戏状态，减少网络波动的影响
+      saveGameStateThrottled(state);
+      
+      if (G.mode === 'online') G.conns.forEach(c => c.send({ type: 'state', state }));
+      if (G.mode === 'lan') G.bc.postMessage({ type: 'state', state });
+    }
+
+    function broadcast(d) {
+      if (G.mode === 'online') G.conns.forEach(c => c.send(d));
+      if (G.mode === 'lan') G.bc.postMessage(d);
+    }
+
+    // 全屏功能
+    function toggleFullscreen() {
+      const elem = document.documentElement;
+      if (!document.fullscreenElement) {
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen();
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        } else if (elem.msRequestFullscreen) {
+          elem.msRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        } else if (document.msExitFullscreen) {
+          document.msExitFullscreen();
+        }
+      }
+    }
+
+    // 监听全屏状态变化
+    document.addEventListener('fullscreenchange', updateFullscreenButton);
+    document.addEventListener('webkitfullscreenchange', updateFullscreenButton);
+    document.addEventListener('msfullscreenchange', updateFullscreenButton);
+
+    function updateFullscreenButton() {
+      const fullscreenBtn = document.querySelector('button[onclick="toggleFullscreen()"]');
+      if (fullscreenBtn) {
+        if (document.fullscreenElement) {
+          fullscreenBtn.textContent = '退出全屏';
+        } else {
+          fullscreenBtn.textContent = '全屏';
+        }
+      }
+    }
+
+    // ==================== 网络连接检测和重连机制 ====================
+    let networkStatus = true;
+    let reconnectAttempts = 0;
+    const MAX_RECONNECT_ATTEMPTS = 5;
+    const RECONNECT_INTERVAL = 3000;
+
+    // 检测网络连接状态
+    function checkNetworkStatus() {
+      const online = navigator.onLine;
+      if (online !== networkStatus) {
+        networkStatus = online;
+        if (online) {
+          toast('网络连接已恢复');
+          attemptReconnect();
+        } else {
+          toast('网络连接已断开，正在尝试重连...');
+        }
+      }
+    }
+
+    // 尝试重连
+    function attemptReconnect() {
+      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+        toast('重连失败，请检查网络连接');
+        return;
+      }
+
+      if (G.mode === 'online' && G.peer && !G.conns.length) {
+        reconnectAttempts++;
+        toast(`尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        
+        // 重新连接到房间
+        if (G.roomId) {
+          setTimeout(() => {
+            try {
+              const conn = G.peer.connect(G.roomId);
+              setupConn(conn);
+            } catch (error) {
+              console.error('重连失败:', error);
+              // 尝试重新创建Peer实例
+              if (G.peer) {
+                G.peer.destroy();
+              }
+              G.peer = new Peer();
+              G.peer.on('open', () => {
+                const conn = G.peer.connect(G.roomId);
+                setupConn(conn);
+              });
+            }
+          }, RECONNECT_INTERVAL);
+        }
+      } else if (G.mode === 'lan' && G.roomId) {
+        reconnectAttempts++;
+        toast(`尝试重连... (${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        
+        setTimeout(() => {
+          try {
+            if (G.bc) {
+              G.bc.close();
+            }
+            G.bc = new BroadcastChannel('ddz_lan_' + G.roomId);
+            G.bc.onmessage = e => handleLanMsg(e.data);
+            G.bc.onclose = () => {
+              toast('本地网络连接已断开');
+              // 自动尝试重连
+              setTimeout(attemptReconnect, RECONNECT_INTERVAL);
+            };
+            G.bc.postMessage({ type: 'join' });
+          } catch (error) {
+            console.error('重连失败:', error);
+            // 再次尝试重连
+            setTimeout(attemptReconnect, RECONNECT_INTERVAL);
+          }
+        }, RECONNECT_INTERVAL);
+      }
+    }
+
+    // 监听网络状态变化
+    window.addEventListener('online', checkNetworkStatus);
+    window.addEventListener('offline', checkNetworkStatus);
+
+    // 定期检查网络状态
+    setInterval(checkNetworkStatus, 10000);
+
+    // ==================== 游戏状态本地缓存 ====================
+    // 游戏状态缓存
+    function saveGameState() {
+      if (G.phase !== 'play') return;
+      
+      const gameState = {
+        players: G.players.map(p => ({ ...p, hand: p.hand.length })),
+        dipai: G.dipai,
+        cur: G.cur,
+        last: G.last,
+        passCnt: G.passCnt,
+        phase: G.phase,
+        mult: G.mult,
+        bid: G.bid,
+        mode: G.mode,
+        roomId: G.roomId
+      };
+      
+      localStorage.setItem('ddz_game_state', JSON.stringify(gameState));
+    }
+
+    // 加载游戏状态
+    function loadGameState() {
+      const savedState = localStorage.getItem('ddz_game_state');
+      if (savedState) {
+        try {
+          const gameState = JSON.parse(savedState);
+          if (gameState.roomId === G.roomId) {
+            // 只恢复基本状态，不恢复手牌（避免作弊）
+            G.players = gameState.players;
+            G.dipai = gameState.dipai;
+            G.cur = gameState.cur;
+            G.last = gameState.last;
+            G.passCnt = gameState.passCnt;
+            G.phase = gameState.phase;
+            G.mult = gameState.mult;
+            G.bid = gameState.bid;
+            toast('已恢复游戏状态');
+            return true;
+          }
+        } catch (error) {
+          console.error('加载游戏状态失败:', error);
+        }
+      }
+      return false;
+    }
+
+    // 定期保存游戏状态
+    setInterval(saveGameState, 10000);
+
+    // 更新房间名称
+    function updateRoomName() {
+      const roomName = document.getElementById('room-name').value.trim();
+      if (roomName) {
+        G.roomName = roomName;
+        toast(`房间名称已更新为: ${roomName}`);
+      } else {
+        toast('请输入房间名称');
+      }
+    }
+
+    // 房间搜索功能
+    function searchRooms() {
+      const searchTerm = document.getElementById('search-input').value.trim().toUpperCase();
+      const resultsContainer = document.getElementById('search-results');
+      
+      if (!searchTerm) {
+        resultsContainer.innerHTML = '<div style="color: var(--muted); font-size: 13px; text-align: center;">请输入房间号或名称进行搜索</div>';
+        return;
+      }
+      
+      // 模拟搜索结果
+      const mockRooms = [
+        { id: 'DDZ1234', name: '欢乐斗地主', players: 1, maxPlayers: 3 },
+        { id: 'DDZ5678', name: '高手对局', players: 2, maxPlayers: 3 },
+        { id: 'DDZ9012', name: '新手教学', players: 3, maxPlayers: 3 },
+        { id: 'DDZ3456', name: '快速开局', players: 1, maxPlayers: 3 }
+      ];
+      
+      // 过滤结果，支持按房间号或名称搜索
+      const filteredRooms = mockRooms.filter(room => 
+        room.id.includes(searchTerm) || 
+        room.name.toUpperCase().includes(searchTerm)
+      );
+      
+      if (filteredRooms.length === 0) {
+        resultsContainer.innerHTML = '<div style="color: var(--muted); font-size: 13px; text-align: center;">未找到匹配的房间</div>';
+      } else {
+        let resultsHTML = '';
+        filteredRooms.forEach(room => {
+          resultsHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 4px;">
+              <div>
+                <div style="font-family: 'JetBrains Mono', monospace;">${room.id}</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">${room.name}</div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <span style="font-size: 12px; color: var(--muted);">${room.players}/${room.maxPlayers}</span>
+                <button class="btn sm" onclick="joinRoom('${room.id}')">加入</button>
+              </div>
+            </div>
+          `;
+        });
+        resultsContainer.innerHTML = resultsHTML;
+      }
+    }
+
+    // 实时更新房间列表
+    function updateRoomList() {
+      if (G.mode === 'online') {
+        // 模拟从服务器获取房间列表
+        const mockRooms = [
+          { id: 'DDZ1234', name: '欢乐斗地主', players: 1, maxPlayers: 3 },
+          { id: 'DDZ5678', name: '高手对局', players: 2, maxPlayers: 3 },
+          { id: 'DDZ9012', name: '新手教学', players: 3, maxPlayers: 3 },
+          { id: 'DDZ3456', name: '快速开局', players: 1, maxPlayers: 3 }
+        ];
+        
+        const searchTerm = document.getElementById('search-input').value.trim().toUpperCase();
+        const resultsContainer = document.getElementById('search-results');
+        
+        if (searchTerm) {
+          const filteredRooms = mockRooms.filter(room => 
+            room.id.includes(searchTerm) || 
+            room.name.toUpperCase().includes(searchTerm)
+          );
+          
+          if (filteredRooms.length === 0) {
+            resultsContainer.innerHTML = '<div style="color: var(--muted); font-size: 13px; text-align: center;">未找到匹配的房间</div>';
+          } else {
+            let resultsHTML = '';
+            filteredRooms.forEach(room => {
+              resultsHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 4px;">
+                  <div>
+                    <div style="font-family: 'JetBrains Mono', monospace;">${room.id}</div>
+                    <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">${room.name}</div>
+                  </div>
+                  <div style="display: flex; gap: 8px;">
+                    <span style="font-size: 12px; color: var(--muted);">${room.players}/${room.maxPlayers}</span>
+                    <button class="btn sm" onclick="joinRoom('${room.id}')">加入</button>
+                  </div>
+                </div>
+              `;
+            });
+            resultsContainer.innerHTML = resultsHTML;
+          }
+        }
+      }
+    }
+
+    // 定期更新房间列表
+    setInterval(updateRoomList, 5000);
+
+    // 绑定输入框回车
+    $('join-input').addEventListener('keypress', e => {
+      if (e.key === 'Enter') joinCurrentMode();
+    });
+    
+    // 搜索输入框回车
+    document.getElementById('search-input').addEventListener('keypress', e => {
+      if (e.key === 'Enter') searchRooms();
+    });
+
+    // ==================== 账户系统 ====================
+    let currentUser = null;
+    let loginAttempts = {}; // 登录尝试记录
+    let currentChatFriend = null; // 当前聊天好友
+    
+    // 初始化管理员账户
+    function initAdminAccount() {
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      
+      if (!users['cx1416']) {
+        users['cx1416'] = {
+          password: 'gdgd1416',
+          friends: [],
+          isAdmin: true,
+          isSuperAdmin: true,
+          bio: '超级管理员'
+        };
+        localStorage.setItem('ddz_users', JSON.stringify(users));
+      }
+      
+      // 确保其他必要的数据结构存在
+      if (!localStorage.getItem('ddz_blacklist')) {
+        localStorage.setItem('ddz_blacklist', JSON.stringify({}));
+      }
+      if (!localStorage.getItem('ddz_unban_requests')) {
+        localStorage.setItem('ddz_unban_requests', JSON.stringify({}));
+      }
+      if (!localStorage.getItem('ddz_login_attempts')) {
+        localStorage.setItem('ddz_login_attempts', JSON.stringify({}));
+      }
+    }
+    
+    // 检查登录尝试次数
+    function checkLoginAttempts(username) {
+      // 所有用户都受登录尝试限制，包括超级管理员
+      const attempts = JSON.parse(localStorage.getItem('ddz_login_attempts') || '{}');
+      const now = Date.now();
+      
+      if (!attempts[username]) {
+        attempts[username] = {
+          count: 0,
+          lastAttempt: now,
+          lockedUntil: 0
+        };
+      } else {
+        // 检查是否还在锁定时间内
+        if (attempts[username].lockedUntil > now) {
+          return true;
+        }
+        
+        // 重置超过1小时的尝试记录
+        if (now - attempts[username].lastAttempt > 3600000) {
+          attempts[username].count = 0;
+        }
+        attempts[username].lastAttempt = now;
+      }
+      
+      attempts[username].count++;
+      
+      // 超过10次尝试，锁定5分钟
+      if (attempts[username].count > 10) {
+        attempts[username].lockedUntil = now + 5 * 60 * 1000; // 5分钟
+        toast('登录尝试过多，账号已被锁定5分钟');
+      }
+      
+      localStorage.setItem('ddz_login_attempts', JSON.stringify(attempts));
+      return attempts[username].lockedUntil > now;
+    }
+    
+    // 检查用户是否在黑名单中
+    function isBlacklisted(username) {
+      // 超级管理员永远不在黑名单中
+      if (username === 'cx1416') return false;
+      
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      return !!blacklist[username];
+    }
+    
+    // 显示登录屏幕
+    function showLoginScreen() {
+      initAdminAccount();
+      showScreen('login-screen');
+    }
+    
+    // 切换到登录表单
+    function switchToLogin() {
+      document.getElementById('login-title').textContent = '登录';
+      document.getElementById('login-form').classList.remove('hidden');
+      document.getElementById('register-form').classList.add('hidden');
+    }
+    
+    // 切换到注册表单
+    function switchToRegister() {
+      document.getElementById('login-title').textContent = '注册';
+      document.getElementById('login-form').classList.add('hidden');
+      document.getElementById('register-form').classList.remove('hidden');
+    }
+    
+    // 检查登录状态是否过期
+    function checkLoginExpiry() {
+      const loginInfo = JSON.parse(localStorage.getItem('ddz_login_info') || '{}');
+      const now = Date.now();
+      const loginTime = loginInfo.loginTime || 0;
+      const expiryTime = 3 * 24 * 60 * 60 * 1000; // 3天过期
+      
+      if (now - loginTime > expiryTime) {
+        // 登录状态过期
+        localStorage.removeItem('ddz_login_info');
+        currentUser = null;
+        updateMenuButtons();
+        toast('登录状态已过期，请重新登录');
+        return false;
+      }
+      return true;
+    }
+    
+    // 登录
+    function login() {
+      const username = document.getElementById('login-username').value.trim();
+      const password = document.getElementById('login-password').value;
+      
+      if (!username || !password) {
+        toast('请输入用户名和密码');
+        return;
+      }
+      
+      // 检查是否在黑名单中
+      if (isBlacklisted(username)) {
+        document.getElementById('unban-modal').classList.remove('hidden');
+        return;
+      }
+      
+      // 检查登录尝试次数
+      if (checkLoginAttempts(username)) {
+        toast('登录尝试过多，账号已被锁定5分钟');
+        return;
+      }
+      
+      // 尝试将登录信息存储到服务器
+      const loginData = {
+        username: username,
+        password: password,
+        timestamp: Date.now()
+      };
+      
+      // 模拟服务器请求（实际部署时替换为真实API）
+      const serverUrl = window.location.origin + '/api/login'; // 假设的服务器API路径
+      
+      fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(loginData)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // 服务器存储成功，只清除登录尝试记录
+          localStorage.removeItem('ddz_login_attempts');
+          
+          currentUser = {
+            username: username,
+            isAdmin: data.isAdmin || false,
+            isSuperAdmin: data.isSuperAdmin || false
+          };
+          
+          // 记录登录时间
+          localStorage.setItem('ddz_login_info', JSON.stringify({
+            username: username,
+            loginTime: Date.now(),
+            serverStored: true
+          }));
+          
+          updateMenuButtons();
+          toast(`登录成功，欢迎 ${username}（服务器存储）`);
+          setTimeout(() => {
+            showFriendsScreen();
+          }, 1000);
+        } else {
+          // 服务器存储失败，使用本地存储
+          const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+          if (users[username] && users[username].password === password) {
+            currentUser = {
+              username: username,
+              isAdmin: users[username].isAdmin || false,
+              isSuperAdmin: users[username].isSuperAdmin || false
+            };
+            
+            // 登录成功，只清除本地账户名密码记录
+            localStorage.removeItem('ddz_login_attempts');
+            
+            // 记录登录时间
+            localStorage.setItem('ddz_login_info', JSON.stringify({
+              username: username,
+              loginTime: Date.now(),
+              serverStored: false
+            }));
+            
+            updateMenuButtons();
+            toast(`登录成功，欢迎 ${username}（本地存储）`);
+            setTimeout(() => {
+              showFriendsScreen();
+            }, 1000);
+          } else {
+            toast('用户名或密码错误');
+          }
+        }
+      })
+      .catch(error => {
+        // 网络错误，使用本地存储
+        console.error('服务器存储失败:', error);
+        
+        // 提供更具体的错误信息
+        let errorMsg = '网络连接失败';
+        if (error.code === 'ERR_NETWORK') {
+          errorMsg = '网络连接失败，请检查网络设置';
+        } else if (error.code === 'ERR_TIMEOUT') {
+          errorMsg = '服务器响应超时，请稍后再试';
+        } else if (error.code === 'ERR_CONNECTION_REFUSED') {
+          errorMsg = '服务器连接被拒绝，请检查服务器状态';
+        } else if (error.message.includes('404')) {
+          errorMsg = '请求的资源不存在';
+        } else if (error.message.includes('500')) {
+          errorMsg = '服务器内部错误';
+        }
+        
+        toast(`网络错误: ${errorMsg}，正在使用本地存储`);
+        
+        const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+        if (users[username] && users[username].password === password) {
+          currentUser = {
+            username: username,
+            isAdmin: users[username].isAdmin || false,
+            isSuperAdmin: users[username].isSuperAdmin || false
+          };
+          
+          // 登录成功，只清除本地账户名密码记录
+          localStorage.removeItem('ddz_login_attempts');
+          
+          // 记录登录时间
+          localStorage.setItem('ddz_login_info', JSON.stringify({
+            username: username,
+            loginTime: Date.now(),
+            serverStored: false
+          }));
+          
+          updateMenuButtons();
+          toast(`登录成功，欢迎 ${username}（本地存储）`);
+          setTimeout(() => {
+            showFriendsScreen();
+          }, 1000);
+        } else {
+          toast('用户名或密码错误');
+        }
+      });
+    }
+    
+    // 注册
+    function register() {
+      const username = document.getElementById('register-username').value.trim();
+      const password = document.getElementById('register-password').value;
+      const confirm = document.getElementById('register-confirm').value;
+      
+      if (!username || !password) {
+        toast('请输入用户名和密码');
+        return;
+      }
+      
+      if (password !== confirm) {
+        toast('两次输入的密码不一致');
+        return;
+      }
+      
+      // 检查是否在黑名单中
+      if (isBlacklisted(username)) {
+        toast('该账户已被禁用');
+        return;
+      }
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      if (users[username]) {
+        toast('用户名已存在');
+        return;
+      }
+      
+      // 尝试将注册信息上传到服务器
+      const registerData = {
+        username: username,
+        password: password,
+        timestamp: Date.now()
+      };
+      
+      // 模拟服务器请求（实际部署时替换为真实API）
+      const serverUrl = window.location.origin + '/api/register'; // 假设的服务器API路径
+      
+      fetch(serverUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(registerData)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.success) {
+          // 服务器存储成功，只清除本地账户名密码记录
+          localStorage.removeItem('ddz_users');
+          
+          currentUser = {
+            username: username,
+            isAdmin: data.isAdmin || false,
+            isSuperAdmin: data.isSuperAdmin || false
+          };
+          
+          // 记录登录时间
+          localStorage.setItem('ddz_login_info', JSON.stringify({
+            username: username,
+            loginTime: Date.now(),
+            serverStored: true
+          }));
+          
+          updateMenuButtons();
+          toast(`注册成功，欢迎 ${username}（服务器存储）`);
+          setTimeout(() => {
+            showFriendsScreen();
+          }, 1000);
+        } else {
+          // 服务器存储失败，使用本地存储
+          users[username] = {
+            password: password,
+            friends: [],
+            bio: ''
+          };
+          localStorage.setItem('ddz_users', JSON.stringify(users));
+          
+          currentUser = {
+            username: username,
+            isAdmin: false,
+            isSuperAdmin: false
+          };
+          updateMenuButtons();
+          toast(`注册成功，欢迎 ${username}（本地存储）`);
+          setTimeout(() => {
+            showFriendsScreen();
+          }, 1000);
+        }
+      })
+      .catch(error => {
+        // 网络错误，使用本地存储
+        console.error('服务器存储失败:', error);
+        
+        // 提供更具体的错误信息
+        let errorMsg = '网络连接失败';
+        if (error.code === 'ERR_NETWORK') {
+          errorMsg = '网络连接失败，请检查网络设置';
+        } else if (error.code === 'ERR_TIMEOUT') {
+          errorMsg = '服务器响应超时，请稍后再试';
+        } else if (error.code === 'ERR_CONNECTION_REFUSED') {
+          errorMsg = '服务器连接被拒绝，请检查服务器状态';
+        } else if (error.message.includes('404')) {
+          errorMsg = '请求的资源不存在';
+        } else if (error.message.includes('500')) {
+          errorMsg = '服务器内部错误';
+        }
+        
+        toast(`网络错误: ${errorMsg}，正在使用本地存储`);
+        
+        users[username] = {
+          password: password,
+          friends: [],
+          bio: ''
+        };
+        localStorage.setItem('ddz_users', JSON.stringify(users));
+        
+        currentUser = {
+          username: username,
+          isAdmin: false,
+          isSuperAdmin: false
+        };
+        updateMenuButtons();
+        toast(`注册成功，欢迎 ${username}（本地存储）`);
+        setTimeout(() => {
+          showFriendsScreen();
+        }, 1000);
+      });
+    }
+    
+    // 退出登录
+    function logout() {
+      currentUser = null;
+      localStorage.removeItem('ddz_login_info');
+      updateMenuButtons();
+      showScreen('menu-screen');
+      toast('已退出登录');
+    }
+    
+    // 更新菜单按钮
+    function updateMenuButtons() {
+      const loginBtn = document.getElementById('login-btn');
+      const friendsBtn = document.getElementById('friends-btn');
+      const adminBtn = document.getElementById('admin-btn');
+      
+      if (currentUser) {
+        loginBtn.classList.add('hidden');
+        friendsBtn.classList.remove('hidden');
+        if (currentUser.isAdmin) {
+          adminBtn.classList.remove('hidden');
+        } else {
+          adminBtn.classList.add('hidden');
+        }
+      } else {
+        loginBtn.classList.remove('hidden');
+        friendsBtn.classList.add('hidden');
+        adminBtn.classList.add('hidden');
+      }
+    }
+    
+    // 显示好友系统屏幕
+    function showFriendsScreen() {
+      if (!currentUser || !checkLoginExpiry()) {
+        showLoginScreen();
+        return;
+      }
+      
+      loadUserProfile();
+      loadFriendsList();
+      showScreen('friends-screen');
+    }
+    
+    // 加载用户资料
+    function loadUserProfile() {
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      const user = users[currentUser.username];
+      
+      document.getElementById('user-username').textContent = currentUser.username;
+      document.getElementById('user-bio').value = user.bio || '';
+    }
+    
+    // 更新个人简介
+    function updateBio() {
+      const bio = document.getElementById('user-bio').value.trim();
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      
+      users[currentUser.username].bio = bio;
+      localStorage.setItem('ddz_users', JSON.stringify(users));
+      toast('个人简介已更新');
+    }
+    
+    // 加载好友列表
+    function loadFriendsList() {
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      const friends = users[currentUser.username]?.friends || [];
+      const friendsList = document.getElementById('friends-list');
+      
+      if (friends.length === 0) {
+        friendsList.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无好友</div>';
+      } else {
+        let friendsHTML = '';
+        friends.forEach(friend => {
+          friendsHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 8px;">
+              <div>
+                <div>${friend}</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">${users[friend]?.bio || '暂无简介'}</div>
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <button class="btn sm" onclick="openChat('${friend}')">聊天</button>
+                <button class="btn sm" onclick="removeFriend('${friend}')">删除</button>
+                <button class="btn sm danger" onclick="reportUser('${friend}')">举报</button>
+                ${currentUser.isSuperAdmin ? `
+                <button class="btn sm" onclick="manageUserFromFriends('${friend}')">管理</button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        });
+        friendsList.innerHTML = friendsHTML;
+      }
+    }
+    
+    // 添加好友
+    function addFriend() {
+      const friendUsername = document.getElementById('add-friend-input').value.trim();
+      
+      if (!friendUsername) {
+        toast('请输入好友用户名');
+        return;
+      }
+      
+      if (friendUsername === currentUser.username) {
+        toast('不能添加自己为好友');
+        return;
+      }
+      
+      // 检查是否在黑名单中
+      if (isBlacklisted(friendUsername)) {
+        toast('该用户已被禁用');
+        return;
+      }
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      if (!users[friendUsername]) {
+        toast('用户不存在');
+        return;
+      }
+      
+      const userFriends = users[currentUser.username].friends || [];
+      if (userFriends.includes(friendUsername)) {
+        toast('已经是好友了');
+        return;
+      }
+      
+      userFriends.push(friendUsername);
+      users[currentUser.username].friends = userFriends;
+      localStorage.setItem('ddz_users', JSON.stringify(users));
+      
+      toast(`添加好友 ${friendUsername} 成功`);
+      loadFriendsList();
+    }
+    
+    // 删除好友
+    function removeFriend(friendUsername) {
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      const userFriends = users[currentUser.username].friends || [];
+      const index = userFriends.indexOf(friendUsername);
+      
+      if (index > -1) {
+        userFriends.splice(index, 1);
+        users[currentUser.username].friends = userFriends;
+        localStorage.setItem('ddz_users', JSON.stringify(users));
+        toast(`删除好友 ${friendUsername} 成功`);
+        loadFriendsList();
+      }
+    }
+    
+    // 打开聊天窗口
+    function openChat(friendUsername) {
+      currentChatFriend = friendUsername;
+      document.getElementById('chat-modal').classList.remove('hidden');
+      loadChatMessages();
+    }
+    
+    // 加载聊天消息
+    function loadChatMessages() {
+      const messages = JSON.parse(localStorage.getItem('ddz_chat') || '{}');
+      const chatKey = `${currentUser.username}_${currentChatFriend}`;
+      const chatMessages = messages[chatKey] || [];
+      const messagesContainer = document.getElementById('chat-messages');
+      
+      if (chatMessages.length === 0) {
+        messagesContainer.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无消息</div>';
+      } else {
+        let messagesHTML = '';
+        chatMessages.forEach(msg => {
+          const align = msg.sender === currentUser.username ? 'right' : 'left';
+          const bg = msg.sender === currentUser.username ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255, 255, 255, 0.05)';
+          messagesHTML += `
+            <div style="display: flex; justify-content: ${align}; margin-bottom: 8px;">
+              <div style="background: ${bg}; border-radius: 6px; padding: 8px 12px; max-width: 70%;">
+                <div style="font-size: 12px; color: var(--muted); margin-bottom: 2px;">${msg.sender}</div>
+                <div>${msg.content}</div>
+                <div style="font-size: 10px; color: var(--muted); margin-top: 2px; text-align: right;">${new Date(msg.time).toLocaleTimeString()}</div>
+              </div>
+            </div>
+          `;
+        });
+        messagesContainer.innerHTML = messagesHTML;
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+    }
+    
+    // 优化的聊天消息存储函数
+    function saveChatMessages(messages) {
+      try {
+        // 限制每个聊天的消息数量，最多保留100条
+        Object.keys(messages).forEach(key => {
+          if (messages[key].length > 100) {
+            messages[key] = messages[key].slice(-100);
+          }
+        });
+        localStorage.setItem('ddz_chat', JSON.stringify(messages));
+      } catch (error) {
+        console.error('保存聊天消息失败:', error);
+      }
+    }
+    
+    // 发送消息
+    function sendMessage() {
+      const content = document.getElementById('chat-input').value.trim();
+      if (!content) return;
+      
+      const messages = JSON.parse(localStorage.getItem('ddz_chat') || '{}');
+      const chatKey = `${currentUser.username}_${currentChatFriend}`;
+      if (!messages[chatKey]) {
+        messages[chatKey] = [];
+      }
+      
+      messages[chatKey].push({
+        sender: currentUser.username,
+        content: content,
+        time: Date.now()
+      });
+      
+      saveChatMessages(messages);
+      document.getElementById('chat-input').value = '';
+      loadChatMessages();
+    }
+    
+    // 关闭聊天窗口
+    function closeChat() {
+      currentChatFriend = null;
+      document.getElementById('chat-modal').classList.add('hidden');
+    }
+    
+    // 举报用户
+    function reportUser(username) {
+      if (username === 'cx1416') {
+        toast('不能举报超级管理员');
+        return;
+      }
+      
+      const reason = prompt('请输入举报理由:');
+      if (!reason) return;
+      
+      const reports = JSON.parse(localStorage.getItem('ddz_reports') || '{}');
+      if (!reports[username]) {
+        reports[username] = [];
+      }
+      
+      reports[username].push({
+        reporter: currentUser.username,
+        reason: reason,
+        time: Date.now()
+      });
+      
+      localStorage.setItem('ddz_reports', JSON.stringify(reports));
+      toast('举报已提交，请等待管理员审核');
+    }
+    
+    // 显示管理员界面
+    function showAdminScreen() {
+      if (!currentUser || !checkLoginExpiry() || !currentUser.isAdmin) {
+        toast('没有管理员权限');
+        return;
+      }
+      
+      loadBlacklist();
+      loadUnbanRequests();
+      loadReports();
+      loadFeedbacks();
+      showScreen('admin-screen');
+    }
+    
+    // 加载举报列表
+    function loadReports() {
+      const reports = JSON.parse(localStorage.getItem('ddz_reports') || '{}');
+      const reportsList = document.getElementById('reports-list');
+      
+      const reportedUsers = Object.keys(reports);
+      if (reportedUsers.length === 0) {
+        reportsList.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无举报</div>';
+      } else {
+        let reportsHTML = '';
+        reportedUsers.forEach(username => {
+          const userReports = reports[username];
+          reportsHTML += `
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+              <div style="font-weight: 500; margin-bottom: 8px;">${username}</div>
+              ${userReports.map(report => `
+                <div style="margin-bottom: 8px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">
+                  <div style="font-size: 12px; color: var(--muted);">举报者: ${report.reporter}</div>
+                  <div style="margin: 4px 0;">${report.reason}</div>
+                  <div style="font-size: 10px; color: var(--muted);">${new Date(report.time).toLocaleString()}</div>
+                </div>
+              `).join('')}
+              <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                <button class="btn sm danger" onclick="banReportedUser('${username}')">拉入黑名单</button>
+                <button class="btn sm" onclick="dismissReports('${username}')">忽略</button>
+                <button class="btn sm" onclick="escalateReport('${username}')">升级到超级管理员</button>
+              </div>
+            </div>
+          `;
+        });
+        reportsList.innerHTML = reportsHTML;
+      }
+    }
+    
+    // 处理被举报用户
+    function banReportedUser(username) {
+      // 超级管理员不能被拉入黑名单
+      if (username === 'cx1416') {
+        toast('超级管理员不能被拉入黑名单');
+        return;
+      }
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      // 检查目标用户是否是管理员
+      if (users[username] && users[username].isAdmin) {
+        // 只有超级管理员可以管理其他管理员
+        if (!currentUser.isSuperAdmin) {
+          toast('管理员不能将其他管理员拉入黑名单');
+          return;
+        }
+      }
+      
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      blacklist[username] = {
+        reason: '多次被举报',
+        time: Date.now()
+      };
+      localStorage.setItem('ddz_blacklist', JSON.stringify(blacklist));
+      
+      // 清除该用户的举报记录
+      const reports = JSON.parse(localStorage.getItem('ddz_reports') || '{}');
+      delete reports[username];
+      localStorage.setItem('ddz_reports', JSON.stringify(reports));
+      
+      toast(`已将 ${username} 拉入黑名单`);
+      loadReports();
+      loadBlacklist();
+    }
+    
+    // 忽略举报
+    function dismissReports(username) {
+      const reports = JSON.parse(localStorage.getItem('ddz_reports') || '{}');
+      if (reports[username]) {
+        // 超级管理员忽略时，转交给普通管理员处理
+        if (currentUser.isSuperAdmin) {
+          const userReports = reports[username];
+          
+          // 创建一个新的反馈给管理员
+          const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+          if (!feedbacks['admin']) {
+            feedbacks['admin'] = [];
+          }
+          
+          feedbacks['admin'].push({
+            user: currentUser.username,
+            type: 'report_dismissal',
+            content: `${username} 的举报被超级管理员忽略，转交给管理员处理`,
+            time: Date.now(),
+            status: 'assigned',
+            assignedTo: null,
+            originalReports: userReports
+          });
+          
+          localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+          
+          // 重新智能分配
+          assignFeedback();
+          
+          toast('已忽略该用户的举报并转交给管理员处理');
+        } else {
+          // 普通管理员直接忽略
+          toast('已忽略该用户的举报');
+        }
+        
+        delete reports[username];
+        localStorage.setItem('ddz_reports', JSON.stringify(reports));
+        loadReports();
+        loadFeedbacks();
+      }
+    }
+    
+    // 从好友列表管理用户
+    function manageUserFromFriends(username) {
+      if (!currentUser.isSuperAdmin) return;
+      
+      // 跳转到管理员界面
+      showAdminScreen();
+      
+      // 填充用户名并执行管理
+      document.getElementById('admin-user-input').value = username;
+      setTimeout(() => {
+        manageUser();
+      }, 100);
+    }
+    
+    // 管理用户
+    function manageUser() {
+      const username = document.getElementById('admin-user-input').value.trim();
+      if (!username) {
+        toast('请输入用户名');
+        return;
+      }
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      const userManagement = document.getElementById('user-management');
+      
+      if (!users[username]) {
+        userManagement.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">用户不存在</div>';
+        return;
+      }
+      
+      const isBlacklisted = !!blacklist[username];
+      const isAdmin = users[username].isAdmin || false;
+      
+      userManagement.innerHTML = `
+        <div style="margin-bottom: 16px;">
+          <div style="margin-bottom: 8px;">用户名: ${username}</div>
+          <div style="margin-bottom: 8px;">个人简介: ${users[username].bio || '暂无'}</div>
+          <div style="margin-bottom: 8px;">管理员: ${isAdmin ? '是' : '否'}</div>
+          <div style="margin-bottom: 8px;">黑名单: ${isBlacklisted ? '是' : '否'}</div>
+        </div>
+        <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+          ${currentUser.isSuperAdmin ? `<button class="btn sm ${isAdmin ? 'danger' : 'primary'}" onclick="toggleAdmin('${username}')">${isAdmin ? '撤销管理员' : '赋予管理员'}</button>` : ''}
+          <button class="btn sm ${isBlacklisted ? 'primary' : 'danger'}" onclick="toggleBlacklist('${username}')">${isBlacklisted ? '移出黑名单' : '拉入黑名单'}</button>
+        </div>
+      `;
+    }
+    
+    // 切换管理员权限
+    function toggleAdmin(username) {
+      if (!currentUser.isSuperAdmin) return;
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      users[username].isAdmin = !users[username].isAdmin;
+      localStorage.setItem('ddz_users', JSON.stringify(users));
+      toast(`${users[username].isAdmin ? '赋予' : '撤销'} ${username} 管理员权限成功`);
+      manageUser();
+    }
+    
+    // 切换黑名单状态
+    function toggleBlacklist(username) {
+      // 超级管理员不能被拉入黑名单
+      if (username === 'cx1416') {
+        toast('超级管理员不能被拉入黑名单');
+        return;
+      }
+      
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      // 检查目标用户是否是管理员
+      if (users[username] && users[username].isAdmin) {
+        // 只有超级管理员可以管理其他管理员
+        if (!currentUser.isSuperAdmin) {
+          toast('管理员不能将其他管理员拉入黑名单');
+          return;
+        }
+      }
+      
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      
+      if (blacklist[username]) {
+        delete blacklist[username];
+        toast(`已将 ${username} 移出黑名单`);
+      } else {
+        blacklist[username] = {
+          reason: '管理员操作',
+          time: Date.now()
+        };
+        toast(`已将 ${username} 拉入黑名单`);
+      }
+      
+      localStorage.setItem('ddz_blacklist', JSON.stringify(blacklist));
+      manageUser();
+      loadBlacklist();
+    }
+    
+    // 加载黑名单
+    function loadBlacklist() {
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      const blacklistList = document.getElementById('blacklist-list');
+      
+      const blacklistUsers = Object.keys(blacklist);
+      if (blacklistUsers.length === 0) {
+        blacklistList.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无黑名单用户</div>';
+      } else {
+        let blacklistHTML = '';
+        blacklistUsers.forEach(username => {
+          const entry = blacklist[username];
+          blacklistHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 8px;">
+              <div>
+                <div>${username}</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 2px;">${entry.reason}</div>
+                <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">${new Date(entry.time).toLocaleString()}</div>
+              </div>
+              <button class="btn sm" onclick="removeFromBlacklist('${username}')">移出</button>
+            </div>
+          `;
+        });
+        blacklistList.innerHTML = blacklistHTML;
+      }
+    }
+    
+    // 从黑名单中移除
+    function removeFromBlacklist(username) {
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      delete blacklist[username];
+      localStorage.setItem('ddz_blacklist', JSON.stringify(blacklist));
+      toast(`已将 ${username} 移出黑名单`);
+      loadBlacklist();
+    }
+    
+    // 加载解封申请
+    function loadUnbanRequests() {
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      const unbanRequestsList = document.getElementById('unban-requests');
+      
+      const requests = Object.keys(unbanRequests);
+      if (requests.length === 0) {
+        unbanRequestsList.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无解封申请</div>';
+      } else {
+        let requestsHTML = '';
+        requests.forEach(username => {
+          const request = unbanRequests[username];
+          requestsHTML += `
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px; margin-bottom: 8px;">
+              <div style="flex: 1;">
+                <div>${username}</div>
+                <div style="font-size: 12px; color: var(--muted); margin-top: 4px;">${request.reason}</div>
+                <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">${new Date(request.time).toLocaleString()}</div>
+              </div>
+              <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+                <button class="btn sm primary" onclick="approveUnban('${username}')">通过</button>
+                <button class="btn sm danger" onclick="rejectUnban('${username}')">拒绝</button>
+                <button class="btn sm" onclick="escalateUnbanRequest('${username}')">升级到超级管理员</button>
+              </div>
+            </div>
+          `;
+        });
+        unbanRequestsList.innerHTML = requestsHTML;
+      }
+    }
+    
+    // 提交解封申请
+    function submitUnbanRequest() {
+      const reason = document.getElementById('unban-reason').value.trim();
+      if (!reason) {
+        toast('请输入解封理由');
+        return;
+      }
+      
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      unbanRequests[currentUser.username] = {
+        reason: reason,
+        time: Date.now()
+      };
+      localStorage.setItem('ddz_unban_requests', JSON.stringify(unbanRequests));
+      
+      document.getElementById('unban-modal').classList.add('hidden');
+      toast('解封申请已提交，请等待管理员审核');
+    }
+    
+    // 关闭解封申请窗口
+    function closeUnbanModal() {
+      document.getElementById('unban-modal').classList.add('hidden');
+    }
+    
+    // 批准解封申请
+    function approveUnban(username) {
+      const blacklist = JSON.parse(localStorage.getItem('ddz_blacklist') || '{}');
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      
+      delete blacklist[username];
+      delete unbanRequests[username];
+      
+      localStorage.setItem('ddz_blacklist', JSON.stringify(blacklist));
+      localStorage.setItem('ddz_unban_requests', JSON.stringify(unbanRequests));
+      
+      toast(`已批准 ${username} 的解封申请`);
+      loadUnbanRequests();
+      loadBlacklist();
+    }
+    
+    // 拒绝解封申请
+    function rejectUnban(username) {
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      if (unbanRequests[username]) {
+        // 超级管理员拒绝时，转交给普通管理员处理
+        if (currentUser.isSuperAdmin) {
+          const request = unbanRequests[username];
+          
+          // 创建一个新的反馈给管理员
+          const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+          if (!feedbacks['admin']) {
+            feedbacks['admin'] = [];
+          }
+          
+          feedbacks['admin'].push({
+            user: currentUser.username,
+            type: 'unban_request',
+            content: `${username} 的解封申请被超级管理员驳回，转交给管理员处理`,
+            time: Date.now(),
+            status: 'assigned',
+            assignedTo: null,
+            originalRequest: request
+          });
+          
+          localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+          
+          // 重新智能分配
+          assignFeedback();
+          
+          toast(`已拒绝 ${username} 的解封申请并转交给管理员处理`);
+        } else {
+          // 普通管理员直接拒绝
+          toast(`已拒绝 ${username} 的解封申请`);
+        }
+        
+        delete unbanRequests[username];
+        localStorage.setItem('ddz_unban_requests', JSON.stringify(unbanRequests));
+        loadUnbanRequests();
+        loadFeedbacks();
+      }
+    }
+    
+    // 升级举报到超级管理员
+    function escalateReport(username) {
+      const reports = JSON.parse(localStorage.getItem('ddz_reports') || '{}');
+      if (reports[username]) {
+        // 这里可以实现将举报升级到超级管理员的逻辑
+        // 例如，创建一个特殊的反馈或通知
+        const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+        if (!feedbacks['superadmin']) {
+          feedbacks['superadmin'] = [];
+        }
+        
+        feedbacks['superadmin'].push({
+          user: currentUser.username,
+          type: 'report_escalation',
+          content: `管理员 ${currentUser.username} 升级了对 ${username} 的举报`,
+          time: Date.now(),
+          status: 'escalated',
+          assignedTo: 'cx1416',
+          originalReports: reports[username]
+        });
+        
+        localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+        
+        // 清除原举报记录
+        delete reports[username];
+        localStorage.setItem('ddz_reports', JSON.stringify(reports));
+        
+        toast('举报已升级到超级管理员');
+        loadReports();
+        loadFeedbacks();
+      }
+    }
+    
+    // 升级解封申请到超级管理员
+    function escalateUnbanRequest(username) {
+      const unbanRequests = JSON.parse(localStorage.getItem('ddz_unban_requests') || '{}');
+      if (unbanRequests[username]) {
+        // 这里可以实现将解封申请升级到超级管理员的逻辑
+        const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+        if (!feedbacks['superadmin']) {
+          feedbacks['superadmin'] = [];
+        }
+        
+        feedbacks['superadmin'].push({
+          user: currentUser.username,
+          type: 'unban_escalation',
+          content: `管理员 ${currentUser.username} 升级了 ${username} 的解封申请`,
+          time: Date.now(),
+          status: 'escalated',
+          assignedTo: 'cx1416',
+          originalRequest: unbanRequests[username]
+        });
+        
+        localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+        
+        // 清除原解封申请
+        delete unbanRequests[username];
+        localStorage.setItem('ddz_unban_requests', JSON.stringify(unbanRequests));
+        
+        toast('解封申请已升级到超级管理员');
+        loadUnbanRequests();
+        loadFeedbacks();
+      }
+    }
+    
+    // ==================== 反馈系统 ====================
+    // 提交反馈
+    function submitFeedback() {
+      const target = document.getElementById('feedback-target').value;
+      const type = document.getElementById('feedback-type').value;
+      const content = document.getElementById('feedback-content').value.trim();
+      
+      if (!content) {
+        toast('请输入反馈内容');
+        return;
+      }
+      
+      // 检查反馈次数限制
+      if (!checkFeedbackLimit(target)) {
+        return;
+      }
+      
+      // 存储反馈
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      if (!feedbacks[target]) {
+        feedbacks[target] = [];
+      }
+      
+      feedbacks[target].push({
+        user: currentUser ? currentUser.username : 'guest',
+        type: type,
+        content: content,
+        time: Date.now(),
+        status: 'pending',
+        assignedTo: null
+      });
+      
+      localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+      
+      // 智能分配反馈
+      assignFeedback();
+      
+      document.getElementById('feedback-modal').classList.add('hidden');
+      toast('反馈已提交，感谢您的反馈');
+    }
+    
+    // 检查反馈次数限制
+    function checkFeedbackLimit(target) {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      const user = currentUser ? currentUser.username : 'guest';
+      const now = Date.now();
+      const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+      
+      // 计算用户在过去一周的反馈次数
+      let count = 0;
+      Object.values(feedbacks).forEach(targetFeedbacks => {
+        targetFeedbacks.forEach(feedback => {
+          if (feedback.user === user && feedback.time > weekAgo) {
+            count++;
+          }
+        });
+      });
+      
+      // 超级管理员限制1次/周，普通用户5次/周
+      if (currentUser && currentUser.isSuperAdmin) {
+        if (count >= 1) {
+          toast('超级管理员每周只能提交1次反馈');
+          return false;
+        }
+      } else {
+        if (count >= 5) {
+          toast('普通用户每周只能提交5次反馈');
+          return false;
+        }
+      }
+      
+      return true;
+    }
+    
+    // 智能分配反馈
+    function assignFeedback() {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      
+      // 收集所有管理员
+      const admins = Object.keys(users).filter(username => users[username].isAdmin);
+      
+      // 分配待处理的反馈
+      Object.keys(feedbacks).forEach(target => {
+        feedbacks[target].forEach(feedback => {
+          if (feedback.status === 'pending' && !feedback.assignedTo) {
+            if (target === 'superadmin') {
+              // 超级管理员的反馈直接分配给超级管理员
+              feedback.assignedTo = 'cx1416';
+            } else {
+              // 智能分配给管理员
+              if (admins.length > 0) {
+                // 简单的轮询分配
+                const assignedIndex = feedbacks[target].indexOf(feedback) % admins.length;
+                feedback.assignedTo = admins[assignedIndex];
+              } else {
+                // 没有管理员，分配给超级管理员
+                feedback.assignedTo = 'cx1416';
+              }
+            }
+            feedback.status = 'assigned';
+          }
+        });
+      });
+      
+      localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+    }
+    
+    // 显示反馈窗口
+    function showFeedbackModal() {
+      document.getElementById('feedback-modal').classList.remove('hidden');
+    }
+    
+    // 关闭反馈窗口
+    function closeFeedbackModal() {
+      document.getElementById('feedback-modal').classList.add('hidden');
+    }
+    
+    // 显示反馈管理界面
+    function showFeedbackManagement() {
+      if (!currentUser || !checkLoginExpiry() || !currentUser.isAdmin) {
+        toast('没有管理员权限');
+        return;
+      }
+      
+      loadFeedbacks();
+      // 这里可以添加一个新的反馈管理屏幕
+    }
+    
+    // 加载反馈列表
+    function loadFeedbacks() {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      const feedbacksList = document.getElementById('feedbacks-list');
+      
+      // 收集所有反馈
+      const allFeedbacks = [];
+      Object.keys(feedbacks).forEach(target => {
+        feedbacks[target].forEach(feedback => {
+          allFeedbacks.push({ ...feedback, target });
+        });
+      });
+      
+      if (allFeedbacks.length === 0) {
+        feedbacksList.innerHTML = '<div style="color: var(--muted); text-align: center; padding: 20px;">暂无反馈</div>';
+        return;
+      }
+      
+      // 按时间倒序排序
+      allFeedbacks.sort((a, b) => b.time - a.time);
+      
+      let feedbacksHTML = '';
+      allFeedbacks.forEach(feedback => {
+        // 只显示分配给当前管理员或超级管理员的反馈
+        if (feedback.assignedTo === currentUser.username || currentUser.isSuperAdmin) {
+          feedbacksHTML += `
+            <div style="margin-bottom: 16px; padding: 12px; background: rgba(255,255,255,0.05); border-radius: 6px;">
+              <div style="font-weight: 500; margin-bottom: 8px;">${feedback.user} - ${feedback.type}</div>
+              <div style="margin-bottom: 8px; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 4px;">${feedback.content}</div>
+              <div style="font-size: 12px; color: var(--muted); margin-bottom: 8px;">
+                目标: ${feedback.target === 'admin' ? '管理员' : '超级管理员'} | 
+                状态: ${getStatusText(feedback.status)} | 
+                分配给: ${feedback.assignedTo || '未分配'} | 
+                ${new Date(feedback.time).toLocaleString()}
+              </div>
+              <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                ${feedback.status === 'assigned' || feedback.status === 'pending' ? `
+                  <button class="btn sm primary" onclick="resolveFeedback('${feedback.target}', ${allFeedbacks.indexOf(feedback)})">解决</button>
+                  <button class="btn sm" onclick="escalateFeedback('${feedback.target}', ${allFeedbacks.indexOf(feedback)})">升级到超级管理员</button>
+                  <button class="btn sm danger" onclick="rejectFeedback('${feedback.target}', ${allFeedbacks.indexOf(feedback)})">驳回</button>
+                ` : ''}
+                ${currentUser.isAdmin ? `
+                  <button class="btn sm danger" onclick="blockUser('${feedback.user}')">屏蔽用户</button>
+                ` : ''}
+              </div>
+            </div>
+          `;
+        }
+      });
+      
+      feedbacksList.innerHTML = feedbacksHTML;
+    }
+    
+    // 获取状态文本
+    function getStatusText(status) {
+      const statusMap = {
+        pending: '待处理',
+        assigned: '已分配',
+        resolved: '已解决',
+        escalated: '已升级',
+        rejected: '已驳回'
+      };
+      return statusMap[status] || status;
+    }
+    
+    // 解决反馈
+    function resolveFeedback(target, index) {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      if (feedbacks[target] && feedbacks[target][index]) {
+        feedbacks[target][index].status = 'resolved';
+        localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+        toast('反馈已解决');
+        loadFeedbacks();
+      }
+    }
+    
+    // 升级反馈到超级管理员
+    function escalateFeedback(target, index) {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      if (feedbacks[target] && feedbacks[target][index]) {
+        // 移除原反馈
+        const feedback = feedbacks[target][index];
+        feedbacks[target].splice(index, 1);
+        
+        // 添加到超级管理员的反馈列表
+        if (!feedbacks['superadmin']) {
+          feedbacks['superadmin'] = [];
+        }
+        feedback.status = 'escalated';
+        feedback.assignedTo = 'cx1416';
+        feedbacks['superadmin'].push(feedback);
+        
+        localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+        toast('反馈已升级到超级管理员');
+        loadFeedbacks();
+      }
+    }
+    
+    // 驳回反馈
+    function rejectFeedback(target, index) {
+      const feedbacks = JSON.parse(localStorage.getItem('ddz_feedbacks') || '{}');
+      if (feedbacks[target] && feedbacks[target][index]) {
+        const feedback = feedbacks[target][index];
+        
+        // 超级管理员驳回时，转交给普通管理员处理
+        if (currentUser.isSuperAdmin) {
+          // 移除原反馈
+          feedbacks[target].splice(index, 1);
+          
+          // 添加到管理员的反馈列表
+          if (!feedbacks['admin']) {
+            feedbacks['admin'] = [];
+          }
+          
+          feedback.status = 'assigned';
+          feedback.assignedTo = null; // 重新分配
+          feedbacks['admin'].push(feedback);
+          
+          // 重新智能分配
+          assignFeedback();
+          
+          toast('反馈已驳回并转交给管理员处理');
+        } else {
+          // 普通管理员直接驳回
+          feedback.status = 'rejected';
+          toast('反馈已驳回');
+        }
+        
+        localStorage.setItem('ddz_feedbacks', JSON.stringify(feedbacks));
+        loadFeedbacks();
+      }
+    }
+    
+    // 处理反馈
+    function handleFeedback(feedbackId, action) {
+      // 这里可以实现反馈的处理逻辑
+    }
+    
+    // 管理员个人屏蔽用户
+    function blockUser(username) {
+      if (!currentUser || !currentUser.isAdmin) {
+        toast('没有管理员权限');
+        return;
+      }
+      
+      // 检查目标用户是否是管理员
+      const users = JSON.parse(localStorage.getItem('ddz_users') || '{}');
+      if (users[username] && users[username].isAdmin) {
+        if (!currentUser.isSuperAdmin) {
+          toast('管理员不能屏蔽其他管理员');
+          return;
+        }
+      }
+      
+      // 实现个人屏蔽功能
+      const blockedUsers = JSON.parse(localStorage.getItem('ddz_blocked_users') || '{}');
+      if (!blockedUsers[currentUser.username]) {
+        blockedUsers[currentUser.username] = [];
+      }
+      
+      if (!blockedUsers[currentUser.username].includes(username)) {
+        blockedUsers[currentUser.username].push(username);
+        localStorage.setItem('ddz_blocked_users', JSON.stringify(blockedUsers));
+        toast(`已屏蔽用户 ${username}`);
+      } else {
+        toast('该用户已被屏蔽');
+      }
+    }
+    
+    // 取消屏蔽用户
+    function unblockUser(username) {
+      if (!currentUser || !currentUser.isAdmin) {
+        toast('没有管理员权限');
+        return;
+      }
+      
+      const blockedUsers = JSON.parse(localStorage.getItem('ddz_blocked_users') || '{}');
+      if (blockedUsers[currentUser.username]) {
+        const index = blockedUsers[currentUser.username].indexOf(username);
+        if (index > -1) {
+          blockedUsers[currentUser.username].splice(index, 1);
+          localStorage.setItem('ddz_blocked_users', JSON.stringify(blockedUsers));
+          toast(`已取消屏蔽用户 ${username}`);
+        }
+      }
+    }
+    
+    // 页面加载时初始化
+    window.addEventListener('DOMContentLoaded', function() {
+      initAdminAccount();
+      
+      // 检查登录状态是否过期
+      const loginInfo = JSON.parse(localStorage.getItem('ddz_login_info') || '{}');
+      if (loginInfo.username) {
+        checkLoginExpiry();
+      }
+    });
+  </script>
+</body>
+</html>
